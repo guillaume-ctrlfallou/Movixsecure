@@ -1244,6 +1244,12 @@ app.post(
   }
 );
 
+// Sonde de vivacite pour le HEALTHCHECK du conteneur. Sans etat, sans
+// dependance : elle repond tant que le processus tourne.
+app.get('/health', (req, res) => {
+  res.json({ ok: true, service: 'movix-watchparty', uptime: process.uptime() });
+});
+
 app.get('/api/watchparty/room/:roomId', (req, res) => {
   const { roomId } = req.params;
   if (!watchpartyRooms.has(roomId)) return res.status(404).json({ message: 'Room not found' });

@@ -1,0 +1,21 @@
+{
+  "name": "movix-watchparty",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Service Socket.IO des Watch Parties Movix.",
+  "main": "watchparty.js",
+  "scripts": {
+    "start": "node watchparty.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.3",
+    "uuid": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

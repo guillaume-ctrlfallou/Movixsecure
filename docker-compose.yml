@@ -1,0 +1,200 @@
+# Stack Movix auto-hebergee — usage personnel.
+#
+# Six services : MySQL, Redis, l'API principale, le proxy de streaming
+# Python, le service Watch Party, et le frontend.
+#
+# ## Exposition reseau
+#
+# Par defaut les ports sont publies sur toutes les interfaces de la machine
+# (0.0.0.0) : le service est donc joignable depuis le reseau local ET depuis
+# le tailnet si Tailscale tourne sur l'hote. Il n'est PAS joignable depuis
+# Internet tant qu'aucune redirection de port n'est configuree sur la box.
+#
+# Pour restreindre a la seule machine, mettre BIND_ADDRESS=127.0.0.1 dans le
+# `.env`. Voir DEPLOIEMENT.md pour l'acces a distance.
+#
+# MySQL et Redis ne publient aucun port : ils ne sont joignables que par les
+# autres conteneurs, sur le reseau interne. C'est volontaire — une base
+# exposee sur le LAN est la premiere chose que scanne un voisin de reseau.
+
+name: movix
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ---------------------------------------------------------------- base ---
+  mysql:
+    <<: *restart
+    image: mysql:8.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # 12 workers x 20 connexions depasserait le defaut de 151.
+      - --max-connections=300
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD manquant - lance ./deploy/setup.sh}
+      MYSQL_DATABASE: ${DB_NAME:-movix}
+      MYSQL_USER: ${DB_USER:-movix}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD manquant - lance ./deploy/setup.sh}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks: [movix]
+
+  redis:
+    <<: *restart
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD manquant - lance ./deploy/setup.sh}", "--save", "60", "1"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    networks: [movix]
+
+  # ------------------------------------------------------------ backends ---
+  mainapi:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.mainapi
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    environment:
+      NODE_ENV: production
+      PORT: 25565
+      # 12 par defaut dans le code : dimensionne pour un serveur 6 coeurs.
+      # Sur une machine personnelle c'est 12 fois la memoire pour rien.
+      NUM_WORKERS: ${NUM_WORKERS:-2}
+
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-movix}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-movix}
+      DB_POOL_CONNECTION_LIMIT: ${DB_POOL_CONNECTION_LIMIT:-10}
+
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant - lance ./deploy/setup.sh}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30d}
+      TMDB_API_KEY: ${TMDB_API_KEY:?TMDB_API_KEY manquant - cle gratuite sur themoviedb.org}
+
+      # Secret partage avec proxiesembed : les deux DOIVENT etre identiques,
+      # sinon aucune URL media signee n'est acceptee (fail-closed).
+      MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?MEDIA_SIGNING_SECRET manquant - lance ./deploy/setup.sh}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY manquant - lance ./deploy/setup.sh}
+
+      PROXY_SERVER_URL: http://proxiesembed:25569/proxy
+      PUBLIC_API_BASE: ${PUBLIC_MAIN_API}
+      FRONTEND_BASE_URL: ${PUBLIC_SITE_URL}
+      # Remplace la liste de domaines codee en dur (qui contenait des tiers).
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+
+      # Domaines des sources — a mettre a jour quand une source deplace son
+      # site. C'est le principal geste de maintenance du catalogue.
+      WIFLIX_BASE_URL: ${WIFLIX_BASE_URL:-}
+      COFLIX_BASE_URL: ${COFLIX_BASE_URL:-}
+      CINESTREAM_BASE_URL: ${CINESTREAM_BASE_URL:-}
+      DARKIWORLD_BASE_URL: ${DARKIWORLD_BASE_URL:-}
+      J1F_BASE_URL: ${J1F_BASE_URL:-}
+      SWIFTFLOW_BASE_URL: ${SWIFTFLOW_BASE_URL:-}
+    volumes:
+      - mainapi-cache:/app/cache
+      - mainapi-data:/app/data
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:25565:25565"
+    networks: [movix]
+
+  proxiesembed:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.proxiesembed
+    depends_on:
+      mysql: {condition: service_healthy}
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-movix}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-movix}
+
+      # Identique a mainapi, sans exception.
+      MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET}
+      MEDIA_SIGNATURE_TTL: ${MEDIA_SIGNATURE_TTL:-43200}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+
+      PROXY_BASE: ${PUBLIC_PROXIES_EMBED_API}
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:25569:25569"
+    networks: [movix]
+
+  watchparty:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.watchparty
+    environment:
+      WATCHPARTY_PORT: 25566
+      WATCHPARTY_REST_CORS_ORIGIN: ${PUBLIC_SITE_URL}
+      WATCHPARTY_SOCKET_CORS_ORIGIN: ${PUBLIC_SITE_URL}
+      WATCHPARTY_CORS_CREDENTIALS: "true"
+      WATCHPARTY_ADMIN_SECRET: ${WATCHPARTY_ADMIN_SECRET:?WATCHPARTY_ADMIN_SECRET manquant - lance ./deploy/setup.sh}
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:25566:25566"
+    networks: [movix]
+
+  # ------------------------------------------------------------ frontend ---
+  frontend:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Vite fige ces valeurs DANS le bundle au moment du build : elles
+        # doivent etre les URLs vues par le NAVIGATEUR, pas les noms de
+        # services Docker. Changer une de ces variables impose un
+        # `docker compose build frontend`, un restart ne suffit pas.
+        VITE_SITE_URL: ${PUBLIC_SITE_URL}
+        VITE_MAIN_API: ${PUBLIC_MAIN_API}
+        VITE_WATCHPARTY_API: ${PUBLIC_WATCHPARTY_API}
+        VITE_PROXIES_EMBED_API: ${PUBLIC_PROXIES_EMBED_API}
+        VITE_TMDB_API_KEY: ${TMDB_API_KEY}
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+        VITE_TURNSTILE_INVISIBLE_SITEKEY: ${VITE_TURNSTILE_INVISIBLE_SITEKEY:-}
+        VITE_SUPPORT_TELEGRAM_URL: ${VITE_SUPPORT_TELEGRAM_URL:-}
+        VITE_APP_BUILD_ID: ${VITE_APP_BUILD_ID:-selfhosted}
+    environment:
+      PORT: 3001
+      # Lues par server/securityHeaders.js pour construire le connect-src.
+      VITE_MAIN_API: ${PUBLIC_MAIN_API}
+      VITE_WATCHPARTY_API: ${PUBLIC_WATCHPARTY_API}
+      VITE_PROXIES_EMBED_API: ${PUBLIC_PROXIES_EMBED_API}
+      # Decommenter uniquement pour diagnostiquer un blocage CSP.
+      # CSP_DISABLED: "true"
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:3001:3001"
+    networks: [movix]
+
+volumes:
+  mysql-data:
+  redis-data:
+  mainapi-cache:
+  mainapi-data:
+
+networks:
+  movix:
+    driver: bridge

@@ -29,6 +29,28 @@ Le vrai risque est ailleurs, et il est plus grave que de la pub.
 | 9 | App mobile | Moyen | `mixedContentMode="always"` |
 | 10 | `routes/proxy.js` | Faible | SSRF complète — mais **code mort** |
 
+### État des correctifs
+
+Ce tableau est tenu à jour ; les constats détaillés en § 4 décrivent l'état
+**d'origine**, conservé comme trace de ce qui a été trouvé.
+
+| # | Constat | État |
+|---|---|---|
+| 1 | Extension navigateur | ⬜ Non corrigé — **ne pas installer l'extension** (décision retenue) |
+| 2 | Iframes sans sandbox | ✅ Corrigé — politique unique `src/utils/embedSandbox.ts` |
+| 3 | Aucune CSP | ✅ Corrigé — `server/securityHeaders.js` |
+| 4 | JWT sans expiration | ✅ Corrigé — 30 j, réglable par `JWT_EXPIRES_IN` |
+| 5 | Token en `postMessage(*)` | ⬜ Sans objet — le pont ne sert que si l'extension est installée |
+| 6 | SW piloté par rentry.co | ✅ Corrigé — défauts vidés dans `vite.config.ts`, garde dans `sw.js` |
+| 7 | Soumissions : protocole | ✅ Corrigé — whitelist http/https, routes unitaire **et** bulk |
+| 8 | `domainRestriction` | ✅ Atténué — `ALLOWED_ORIGINS` remplace la liste en dur |
+| 9 | Contenu mixte mobile | ⬜ Non corrigé — concerne l'app mobile, hors périmètre navigateur |
+| 10 | SSRF (code mort) | ✅ Corrigé — `routes/proxy.js` supprimé |
+| — | Script de régie | ✅ Neutralisé — aucune variable pub dans le `.env` généré, popup auto-désactivé |
+| — | Injection jsDelivr | ✅ Corrigé — code mort retiré de `VideoPlayer.tsx` |
+
+Déploiement durci : voir [`DEPLOIEMENT.md`](./DEPLOIEMENT.md).
+
 **Verdict** : le cœur du projet est correctement écrit. Le danger vient de la périphérie —
 l'extension, et les iframes tierces. Les deux se neutralisent, et la section 6 dit comment.
 
