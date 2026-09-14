@@ -6,7 +6,18 @@
 const cors = require("cors");
 const { getOAuthAllowedCorsOrigins } = require('../utils/oauthClients');
 
-const STATIC_ALLOWED_DOMAINS = [
+// Domaines autorises, pilotes par l'environnement.
+//
+// La liste etait codee en dur et contenait des domaines tiers
+// (nakios.site, cinezo.site, cinezo.online, filmib.cc) : des origines
+// exterieures au projet, autorisees a appeler l'API avec `credentials: true`.
+// Sur un deploiement personnel elles n'ont rien a y faire, et il ne devrait
+// pas falloir modifier le code pour s'en debarrasser.
+//
+// ALLOWED_ORIGINS (liste separee par des virgules, hostnames sans protocole)
+// remplace entierement la liste par defaut quand elle est renseignee.
+// Les sous-domaines de chaque entree sont acceptes.
+const DEFAULT_ALLOWED_DOMAINS = [
     'localhost:3000',
     'movix.blog',
     'movix.rodeo',
@@ -27,6 +38,18 @@ const STATIC_ALLOWED_DOMAINS = [
     'movix.show',
     'movix.fun'
 ];
+
+function resolveAllowedDomains() {
+    const raw = (process.env.ALLOWED_ORIGINS || '').trim();
+    if (!raw) return DEFAULT_ALLOWED_DOMAINS;
+    const parsed = raw
+        .split(',')
+        .map((entry) => entry.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, ''))
+        .filter(Boolean);
+    return parsed.length > 0 ? parsed : DEFAULT_ALLOWED_DOMAINS;
+}
+
+const STATIC_ALLOWED_DOMAINS = resolveAllowedDomains();
 
 function isAllowedStaticOrigin(origin) {
   try {

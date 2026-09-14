@@ -227,9 +227,16 @@ function createLinkSubmissionsRouter(mysqlPool, redis) {
                 return res.status(400).json({ error: 'media_type doit être movie ou tv' });
             }
 
-            // Validate URL format
+            // Validate URL format + protocole.
+            // `new URL()` seul accepte javascript:, data:, vbscript: et file: —
+            // une soumission `javascript:...` etait stockee telle quelle et
+            // n'attendait qu'un rendu dans un href/src pour devenir une XSS
+            // stockee. Seuls http et https ont un sens pour un lien de lecture.
             try {
-                new URL(url);
+                const parsed = new URL(url);
+                if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                    return res.status(400).json({ error: 'URL invalide : seuls http et https sont acceptes' });
+                }
             } catch {
                 return res.status(400).json({ error: 'URL invalide' });
             }
@@ -368,7 +375,14 @@ function createLinkSubmissionsRouter(mysqlPool, redis) {
             // Validate all URLs
             for (const [ep, url] of Object.entries(episode_urls)) {
                 if (!url || typeof url !== 'string' || !url.trim()) return res.status(400).json({ error: `URL manquante pour l'épisode ${ep}` });
-                try { new URL(url.trim()); } catch { return res.status(400).json({ error: `URL invalide pour l'épisode ${ep}` }); }
+                // Meme whitelist de protocole que la soumission unitaire :
+                // sans elle cette route restait la voie ouverte vers la base.
+                try {
+                    const parsed = new URL(url.trim());
+                    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                        return res.status(400).json({ error: `URL invalide pour l'épisode ${ep} : seuls http et https sont acceptes` });
+                    }
+                } catch { return res.status(400).json({ error: `URL invalide pour l'épisode ${ep}` }); }
                 if (url.trim().length > 2048) return res.status(400).json({ error: `URL trop longue pour l'épisode ${ep}` });
             }
 

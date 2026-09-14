@@ -1,0 +1,45 @@
+# API principale Movix — Express + MySQL + Redis.
+#
+# Image Debian (bookworm) et non Alpine : plusieurs dependances sont natives
+# ou fournies en binaires precompiles lies a la glibc — better-sqlite3 et
+# sqlite3 (node-gyp), tiny-secp256k1 (WASM + bindings), cycletls (binaire Go),
+# impit, @ffmpeg-installer/ffmpeg. En musl (Alpine) il faudrait tout
+# recompiler, quand ca compile.
+FROM node:22-bookworm-slim AS deps
+WORKDIR /app
+
+# Outils de compilation, presents uniquement dans cette etape : ils ne
+# suivront pas dans l'image finale.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 make g++ ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY API/Mainapi/package.json API/Mainapi/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+# ---------------------------------------------------------------------------
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app
+
+# ffmpeg runtime : @ffmpeg-installer fournit le binaire, mais il a besoin des
+# bibliotheques systeme. curl sert au HEALTHCHECK.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=production
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY API/Mainapi/ ./
+
+# Caches disque et donnees utilisateur : montes en volume par compose, crees
+# ici pour que les droits soient bons meme sans volume.
+RUN mkdir -p cache data/users data/guests && chown -R node:node /app
+
+USER node
+EXPOSE 25565
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-25565}/health" || exit 1
+
+CMD ["node", "server.js"]

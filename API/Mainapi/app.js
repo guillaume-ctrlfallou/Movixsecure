@@ -276,6 +276,15 @@ app.use(jsonParseErrorHandler);
 
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
+// Sonde de vivacite. Placee avant les routes metier et hors de toute
+// authentification : elle ne doit dependre ni de MySQL ni de Redis, sinon un
+// orchestrateur redemarrerait l'API en boucle pendant que la base remonte.
+// Elle repond aussi a `domainRestriction`, qui laisse passer les requetes sans
+// Origin ni Referer — c'est le cas d'un HEALTHCHECK Docker.
+app.get('/health', (req, res) => {
+  res.json({ ok: true, service: 'movix-mainapi', pid: process.pid, uptime: process.uptime() });
+});
+
 // 9. Serve uploaded OAuth app icons (`public/oauth-icons/<filename>`).
 //    Le panel admin upload ici, OAuthAuthorizePage lit `/oauth-icons/<filename>`.
 const { ICON_DIR: OAUTH_ICON_DIR } = require('./utils/oauthClientsDb');

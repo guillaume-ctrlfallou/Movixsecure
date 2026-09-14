@@ -26,12 +26,23 @@ function injectPublicConfig(): Plugin {
   let siteUrl: string | undefined
 
   const replacePlaceholders = (source: string): string => {
-    const mirrors = (process.env.VITE_DEFAULT_MIRRORS || 'movix.health')
+    // Repli de domaine : entierement opt-in.
+    //
+    // Ces deux valeurs avaient un defaut code en dur ('movix.health' et
+    // 'https://rentry.co/movix'). Ne pas declarer la variable ne desactivait
+    // donc rien : le service worker embarquait quand meme l'adresse d'une
+    // paste publique, et redirigeait vers ce qui s'y trouvait des que le site
+    // paraissait injoignable. Quiconque prend le controle de cette paste
+    // prend le controle de la destination des utilisateurs.
+    //
+    // Un deploiement personnel n'a pas de miroir : variables vides = aucune
+    // redirection, le service worker rend sa page d'erreur a la place
+    // (pickNextMirror renvoie null quand la liste est vide).
+    const mirrors = (process.env.VITE_DEFAULT_MIRRORS || '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-    const configUrl =
-      process.env.VITE_MIRRORS_CONFIG_URL || 'https://rentry.co/movix'
+    const configUrl = process.env.VITE_MIRRORS_CONFIG_URL || ''
     return source
       .replace(/__MOVIX_DEFAULT_MIRRORS__/g, JSON.stringify(mirrors))
       .replace(/__MOVIX_CONFIG_URL__/g, JSON.stringify(configUrl))

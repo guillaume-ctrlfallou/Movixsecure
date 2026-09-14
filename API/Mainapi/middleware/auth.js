@@ -27,13 +27,23 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
+// Duree de vie des jetons. Ils etaient auparavant emis sans claim `exp`,
+// donc valides pour toujours : un jeton exfiltre une seule fois (script
+// tiers dans la page, sauvegarde de navigateur, poste partage) restait
+// utilisable indefiniment, et la seule parade etait une revocation manuelle
+// cote sessions. 30 jours couvre largement un usage normal sans reconnexion
+// penible. Surchargeable par JWT_EXPIRES_IN (format `ms`: '30d', '12h'...).
+const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '30d').trim();
+
 function issueJwt(userType, userId, sessionId, authMethod = null) {
-  // Issue a token without expiration (no exp claim)
   const payload = { sub: userId, userType, sessionId };
   if (AUTH_METHODS.includes(authMethod)) {
     payload.authMethod = authMethod;
   }
-  return jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
+  return jwt.sign(payload, JWT_SECRET, {
+    algorithm: 'HS256',
+    expiresIn: JWT_EXPIRES_IN,
+  });
 }
 
 function parseStoredAuth(rawValue) {

@@ -196,6 +196,11 @@ function parseConfig(text) {
 }
 
 async function loadMirrors() {
+  // Aucune source de configuration declaree (cas d'une instance personnelle) :
+  // inutile de tenter un fetch sur une chaine vide, et rien a aller chercher.
+  if (!CONFIG_URL) {
+    return Array.isArray(DEFAULT_MIRRORS) ? DEFAULT_MIRRORS.slice() : [];
+  }
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CONFIG_TIMEOUT_MS);

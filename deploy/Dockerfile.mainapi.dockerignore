@@ -1,0 +1,50 @@
+# Contexte de build de l'API principale.
+#
+# BuildKit lit en priorite `<chemin-du-Dockerfile>.dockerignore` et ignore
+# alors le `.dockerignore` racine. C'est indispensable ici : celui de la racine
+# exclut `API` (il est ecrit pour le build du FRONTEND, qui n'a pas besoin des
+# backends), ce qui viderait completement le contexte de cette image.
+#
+# On part donc d'une liste propre : tout ce qui n'est pas `API/Mainapi`.
+
+**/node_modules
+**/.git
+**/.env
+**/.env.*
+!**/.env.example
+
+# Autres composants du depot — hors sujet pour cette image.
+API/proxiesembed
+API/watchpartyAPI
+src
+public
+dist
+server
+functions
+app
+extension
+userscript
+wasm
+PreMid
+cloudflareproxy
+others
+scripts
+tests
+deploy
+docs
+
+# Etat local de l'API : regenere au demarrage, monte en volume par compose.
+API/Mainapi/cache
+API/Mainapi/data
+API/Mainapi/routes/__tests__
+API/Mainapi/utils/__tests__
+
+# Divers
+*.log
+*.md
+!README.md
+movix.png
+.github
+.vscode
+.idea
+.DS_Store

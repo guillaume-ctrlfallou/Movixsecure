@@ -1,0 +1,36 @@
+# Proxy de streaming Python (aiohttp).
+#
+# Debian plutot qu'Alpine : lxml, cryptography, pycryptodome et curl_cffi
+# publient des roues manylinux. En Alpine (musl) pip recompile tout depuis
+# les sources — plusieurs minutes de build et des dependances systeme en plus.
+FROM python:3.11-slim-bookworm AS deps
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential libxml2-dev libxslt1-dev libffi-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY API/proxiesembed/requirements.txt ./
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim-bookworm AS runner
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libxml2 libxslt1.1 ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 movix
+
+COPY --from=deps /install /usr/local
+COPY API/proxiesembed/ ./
+
+ENV PYTHONUNBUFFERED=1
+RUN chown -R movix:movix /app
+USER movix
+EXPOSE 25569
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:25569/health" || exit 1
+
+CMD ["python", "server.py"]
