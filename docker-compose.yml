@@ -26,7 +26,13 @@ services:
   # ---------------------------------------------------------------- base ---
   mysql:
     <<: *restart
-    image: mysql:8.4
+    # 8.0 et non 8.4 : la 8.4 a retire le plugin mysql_native_password et
+    # change plusieurs defauts. Deux clients tres differents tapent sur cette
+    # base — mysql2 cote Node, aiomysql/PyMySQL cote Python — et la 8.0 est
+    # celle avec laquelle les deux sont le mieux eprouves. PyMySQL gere
+    # caching_sha2_password grace a `cryptography`, present dans
+    # requirements.txt : rien a assouplir cote authentification.
+    image: mysql:8.0
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci

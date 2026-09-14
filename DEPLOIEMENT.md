@@ -298,6 +298,24 @@ nature que le reste.
 | « Not allowed by CORS » | `ALLOWED_ORIGINS` ne contient pas l'hôte utilisé |
 | Lecteur noir sur un hébergeur | Le sandbox le gêne — changer de source plutôt que de retirer le sandbox |
 | Inaccessible à distance | Tailscale coupé, ou `.env` monté avec `localhost` : § 4 |
+| `COPY failed: no source files were specified` | Ton Docker n'a pas lu les `deploy/Dockerfile.*.dockerignore` — voir ci-dessous |
+
+### Si le build échoue sur « COPY failed »
+
+Le `.dockerignore` de la racine exclut `API/` : il est écrit pour le build du
+**frontend**, qui n'a pas besoin des backends. Les images backend le
+contournent avec un fichier d'exclusion dédié (`deploy/Dockerfile.mainapi.dockerignore`
+et ses deux voisins), que BuildKit lit en priorité.
+
+Si ta version de Docker ne gère pas cette convention, le build s'arrête net sur
+`COPY failed`. Contournement : commente la ligne `API` dans le `.dockerignore`
+de la racine, rebuild, puis remets-la.
+
+```bash
+sed -i 's/^API$/# API/' .dockerignore
+docker compose build
+sed -i 's/^# API$/API/' .dockerignore
+```
 
 ---
 
