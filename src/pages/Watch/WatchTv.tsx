@@ -42,6 +42,7 @@ import {
 } from '../../services/swiftfluxService';
 import type { KisskhSource, KisskhSubtitleTrack } from '../../types/kisskh';
 import { markEpisodeHandoff } from '../../utils/playerFullscreenPersistence';
+import { EMBED_ALLOW, EMBED_SANDBOX, embedReferrerPolicy } from '../../utils/embedSandbox';
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
 
@@ -4222,39 +4223,9 @@ const WatchTv: React.FC = () => {
             src={embedUrl || ''}
             className="w-full h-full border-0"
             allowFullScreen
-            referrerPolicy={(embedUrl || '').toLowerCase().includes('ezplayer') ? 'no-referrer' : 'strict-origin-when-cross-origin'}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            sandbox={(() => {
-              const urlLower = embedUrl ? embedUrl.toLowerCase() : '';
-
-              // Jamais de sandbox pour Mixdrop, Doodstream, ou les lecteurs multi (emmmmbed.com, lecteur6.com)
-              if (urlLower.includes("mixdrop") || urlLower.includes("dood") || urlLower.includes("emmmmbed") || urlLower.includes("lecteur6")) {
-                return undefined;
-              }
-
-              // Jamais de sandbox pour supervideo ou dropload
-              if (urlLower.includes("supervideo") || urlLower.includes("dropload")) {
-                return undefined;
-              }
-
-              // Jamais de sandbox pour les liens Firebase Upload
-              if (urlLower.includes('uqload') || urlLower.includes('luluvdoo')) {
-                return undefined;
-              }
-
-              // Pour omega : jamais de sandbox si mixdrop ou dood (déjà vérifié ci-dessus)
-              if (embedType === 'omega') {
-                if (urlLower.includes('mixdrop') || urlLower.includes('dood')) {
-                  return undefined;
-                }
-                return "allow-scripts allow-same-origin allow-presentation";
-              }
-              // Pour coflix : jamais de sandbox pour les lecteurs multi
-              if (embedType === 'coflix') {
-                return undefined;
-              }
-              return undefined;
-            })()}
+            referrerPolicy={embedReferrerPolicy(embedUrl)}
+            allow={EMBED_ALLOW}
+            sandbox={EMBED_SANDBOX}
           ></iframe>
 
           {/* Source Selection Menu */}

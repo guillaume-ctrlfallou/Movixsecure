@@ -52,6 +52,7 @@ import {
     requestAirPlay,
     AirPlayState
 } from '../utils/castUtils';
+import { EMBED_ALLOW, EMBED_SANDBOX, embedReferrerPolicy } from '../utils/embedSandbox';
 
 // Custom Loader that keeps top-level manifest requests on the proxy URL.
 // Child playlists rewritten by proxiesembed already use stable proxied URLs;
@@ -2125,7 +2126,9 @@ const LiveTVPlayer: React.FC<LiveTVPlayerProps> = ({
                     <iframe
                         src={activeEmbedUrl}
                         className="absolute inset-0 h-full w-full border-0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allow={EMBED_ALLOW}
+                        sandbox={EMBED_SANDBOX}
+                        referrerPolicy={embedReferrerPolicy(activeEmbedUrl)}
                         allowFullScreen
                     />
 

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { useLocation } from 'react-router-dom';
 import { checkVipStatus, isUserVip } from '../utils/vipUtils';
 import { getAdPopupMode, subscribeToAdPopupModeChanges } from '../utils/adPopupMode';
+import { hasAnyAdConfigured } from '../utils/adAdultMode';
 import { SCRIPT_AD_MODE_ENABLED, loadAdScript } from '../utils/adScriptMode';
 
 
@@ -107,6 +108,16 @@ export const AdFreePopupProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   const showPopupForPlayer = useCallback((playerType: string, additionalInfo?: any) => {
+    // Aucune régie configurée (.env vide) : il n'y a pas de pub à montrer, donc
+    // pas de porte à faire franchir. On charge le lecteur directement. Voir
+    // `hasAnyAdConfigured` — c'est le cas d'une instance auto-hébergée.
+    if (!hasAnyAdConfigured()) {
+      setShouldLoadIframe(true);
+      setPlayerToShow(playerType);
+      setShowAdFreePopup(false);
+      return;
+    }
+
     // First check VIP status via server-verified utility
     const isVipUser = isUserVip() || is_vip;
 

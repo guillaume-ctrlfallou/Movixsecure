@@ -51,3 +51,29 @@ export const subscribeToAdultAdsChanges = (cb: (enabled: boolean) => void): (() 
 
 export const getAdTargetUrls = (): string[] =>
   isAdultAdsEnabled() ? AD_URLS_ADULT : [AD_URL_SFW].filter(Boolean);
+
+/**
+ * Vrai si au moins une régie est configurée dans le `.env`.
+ *
+ * Le popup « Voir une pub » n'a aucun sens sans elle : il afficherait une
+ * porte, l'utilisateur cliquerait, et `handlePopupAccept` validerait sans
+ * qu'aucune fenêtre ne s'ouvre — une friction pure, sans contrepartie.
+ *
+ * Dériver l'état de la configuration plutôt que d'ajouter un drapeau dédié
+ * évite qu'ils divergent : un déploiement sans URL de régie (typiquement une
+ * instance personnelle) n'a rien à désactiver, le popup disparaît de lui-même.
+ *
+ * `AD_SCRIPT_SRC` est lu directement depuis l'environnement ici plutôt
+ * qu'importé de `adScriptMode` : ce module est chargé très tôt et une
+ * dépendance circulaire entre les deux serait facile à introduire.
+ */
+export const hasAnyAdConfigured = (): boolean => {
+  const scriptSrc = readEnvUrl(import.meta.env.VITE_AD_SCRIPT_SRC);
+  const swiftflux = readEnvUrl(import.meta.env.VITE_SWIFTFLUX_AD_URL);
+  return (
+    AD_URLS_ADULT.length > 0 ||
+    AD_URL_SFW.length > 0 ||
+    scriptSrc.length > 0 ||
+    swiftflux.length > 0
+  );
+};

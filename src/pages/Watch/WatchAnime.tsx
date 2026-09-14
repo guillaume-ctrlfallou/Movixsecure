@@ -32,6 +32,7 @@ import {
   syncHlsActiveSource,
 } from '../../utils/hlsAutoFallbackGuard';
 import { markEpisodeHandoff } from '../../utils/playerFullscreenPersistence';
+import { EMBED_ALLOW, EMBED_SANDBOX, embedReferrerPolicy } from '../../utils/embedSandbox';
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
@@ -1831,8 +1832,9 @@ const WatchAnime: React.FC = () => {
               src={embedUrl}
               className="w-full h-full border-0"
               allowFullScreen
-              referrerPolicy={(embedUrl || '').toLowerCase().includes('ezplayer') ? 'no-referrer' : undefined}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              referrerPolicy={embedReferrerPolicy(embedUrl)}
+              allow={EMBED_ALLOW}
+              sandbox={EMBED_SANDBOX}
             ></iframe>
           ) : null}
         </div>

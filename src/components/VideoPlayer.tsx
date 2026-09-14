@@ -1,43 +1,31 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { getFrembedBase } from '../utils/frembedConfig';
+import { EMBED_ALLOW, EMBED_SANDBOX } from '../utils/embedSandbox';
 
 interface VideoPlayerProps {
   movieId: string;
-  nextMovie?: any;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, nextMovie }) => {
-  useEffect(() => {
-    const iframe = document.querySelector('iframe');
-    if (iframe) {
-      const iframeWindow = iframe.contentWindow;
-      if (iframeWindow) {
-        iframeWindow.document.head.innerHTML += `
-          <script src="https://cdn.jsdelivr.net/npm/disable-devtool"></script>
-          <script>
-            DisableDevtool({
-              ondevtoolopen: function() {
-                window.location.reload();
-              }
-            });
-          </script>
-        `;
-      }
-    }
-  }, []);
+// L'ancien `useEffect` de ce composant tentait d'écrire dans
+// `iframe.contentWindow.document.head` pour y injecter `disable-devtool`
+// depuis jsDelivr. L'iframe étant cross-origin, l'accès lève systématiquement
+// une SecurityError : le code n'a jamais rien injecté. Il a été retiré plutôt
+// que réparé — un anti-devtools ne protège rien (il s'enlève en une ligne dans
+// la console) et il ajoutait une dépendance CDN tierce dans notre origine.
 
-  return (
-    <iframe
-      src={`${getFrembedBase()}/api/film.php?id=${movieId}`}
-      width="100%"
-      height="500px"
-      frameBorder="0"
-      allowFullScreen
-      scrolling="no"
-      style={{ overflow: 'hidden' }}
-      sandbox="allow-scripts allow-same-origin"
-    />
-  );
-};
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId }) => (
+  <iframe
+    src={`${getFrembedBase()}/api/film.php?id=${movieId}`}
+    width="100%"
+    height="500px"
+    frameBorder="0"
+    allowFullScreen
+    scrolling="no"
+    style={{ overflow: 'hidden' }}
+    allow={EMBED_ALLOW}
+    sandbox={EMBED_SANDBOX}
+    referrerPolicy="strict-origin-when-cross-origin"
+  />
+);
 
-export default VideoPlayer; 
+export default VideoPlayer;

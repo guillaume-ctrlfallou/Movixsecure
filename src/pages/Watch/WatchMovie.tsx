@@ -39,6 +39,7 @@ import {
   resolveRenderedWatchSource,
   syncHlsActiveSource,
 } from '../../utils/hlsAutoFallbackGuard';
+import { EMBED_ALLOW, EMBED_SANDBOX, embedReferrerPolicy } from '../../utils/embedSandbox';
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
 
@@ -2980,9 +2981,9 @@ const WatchMovie: React.FC = () => {
             src={embedUrl || ''}
             className="w-full h-full border-0"
             allowFullScreen
-            referrerPolicy={(embedUrl || '').toLowerCase().includes('ezplayer') ? 'no-referrer' : 'strict-origin-when-cross-origin'}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            sandbox={undefined}
+            referrerPolicy={embedReferrerPolicy(embedUrl)}
+            allow={EMBED_ALLOW}
+            sandbox={EMBED_SANDBOX}
           ></iframe>
 
           {/* Sources Menu Overlay */}
@@ -3828,27 +3829,9 @@ const WatchMovie: React.FC = () => {
             src={embedUrl || ''}
             className="w-full h-full border-0"
             allowFullScreen
-            referrerPolicy={(embedUrl || '').toLowerCase().includes('ezplayer') ? 'no-referrer' : 'strict-origin-when-cross-origin'}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            sandbox={(() => {
-              const urlLower = embedUrl ? embedUrl.toLowerCase() : '';
-
-
-              // Jamais de sandbox pour Mixdrop, Doodstream, ou les lecteurs multi (emmmmbed.com, lecteur6.com)
-              if (urlLower.includes("mixdrop") || urlLower.includes("dood") || urlLower.includes("emmmmbed") || urlLower.includes("lecteur6")) {
-                return undefined;
-              }
-              // Jamais de sandbox pour supervideo ou dropload
-              if (urlLower.includes("supervideo") || urlLower.includes("dropload")) {
-                return undefined;
-              }
-              // Pour Coflix: jamais de sandbox pour les lecteurs multi
-              if (embedType === 'coflix') {
-                return undefined;
-              }
-              // Par défaut, pas de sandbox
-              return undefined;
-            })()}
+            referrerPolicy={embedReferrerPolicy(embedUrl)}
+            allow={EMBED_ALLOW}
+            sandbox={EMBED_SANDBOX}
           ></iframe>
 
           {/* Sources Menu Overlay */}
@@ -3957,7 +3940,8 @@ const WatchMovie: React.FC = () => {
             className="w-full h-full border-0"
             allowFullScreen
             referrerPolicy="strict-origin-when-cross-origin"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allow={EMBED_ALLOW}
+            sandbox={EMBED_SANDBOX}
           ></iframe>
 
           <PlayerOverlayPortal>

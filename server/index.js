@@ -7,6 +7,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSocialPreviewResponse } from '../functions/_lib/socialPreview.js';
 import { registerGracefulShutdown } from './gracefulShutdown.js';
+import { securityHeaders, cspReport } from './securityHeaders.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -40,6 +41,10 @@ const ALWAYS_REVALIDATE = new Set([
   '/_routes.json',
 ]);
 
+// En-têtes de sécurité en premier : ils doivent couvrir toutes les réponses,
+// y compris les fichiers statiques et la page d'index.
+app.use('/*', securityHeaders);
+
 app.use('/*', async (c, next) => {
   await next();
   if (c.res.headers.has('cache-control')) return;
@@ -58,7 +63,7 @@ app.use('/*', async (c, next) => {
   }
 });
 
-app.get('/health', (c) => c.json({ ok: true, runtime: 'node', app: 'movix-hono' }));
+app.get('/health', (c) => c.json({ ok: true, runtime: 'node', app: 'movix-hono', csp: cspReport().enabled }));
 
 const toCloudflareCtx = (c) => ({
   request: new Request(c.req.url, { method: c.req.method, headers: c.req.raw.headers }),
