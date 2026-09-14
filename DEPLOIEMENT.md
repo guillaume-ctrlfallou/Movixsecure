@@ -178,6 +178,46 @@ TV te manque au point de vouloir l'extension, demande d'abord le correctif de
 
 ---
 
+## 5 bis. Live TV — ce qui marche sans l'extension
+
+Le Live TV agrège plusieurs sources de chaînes en direct. Toutes ne sont pas
+accessibles de la même façon (`src/pages/LiveTV.tsx`) :
+
+| Source | Accès | État sur une instance perso |
+|---|---|---|
+| **Vavoo** | Libre | ✅ **Marche tel quel** — HLS direct, aucune clé, aucun VIP |
+| Northlive | Libre | ❌ Exige une clé partenaire absente du dépôt |
+| IPTV (Xtream) | VIP | ⚙️ Marche avec **ton propre** abonnement IPTV |
+| Matchs, autres | VIP **ou** extension | ⚙️ VIP suffit |
+
+**Vavoo est donc la source à utiliser** : elle renvoie des `.m3u8` que le
+lecteur consomme directement, sans proxy ni en-tête particulier.
+
+Northlive apparaîtra vide tant que `NORTHLIVE_API_KEY` n'est pas renseignée.
+Ce n'est pas une erreur de configuration : c'est une clé qu'on n'a pas.
+
+### Se déclarer VIP sur sa propre instance
+
+Le VIP n'est pas un contrôle de licence : c'est une ligne dans **ta** base, dans
+la table `access_keys`. Sur ton instance, tu peux te l'accorder :
+
+```bash
+docker compose exec mysql mysql -u root -p"$DB_ROOT_PASSWORD" movix -e \
+  "INSERT INTO access_keys (key_value, active, duree_validite, expires_at)
+   VALUES ('ma-cle-perso', 1, '10 ans', UNIX_TIMESTAMP() + 315360000);"
+```
+
+Puis saisis `ma-cle-perso` dans l'app (Réglages → VIP). Le serveur la vérifie
+dans `access_keys` via l'en-tête `x-access-key` — c'est `API/Mainapi/checkVip.js`
+qui tranche, pas le navigateur.
+
+Ça débloque la source IPTV et les catalogues réservés, **sans installer
+l'extension**. La seule chose que le VIP ne remplace pas, ce sont les
+catalogues que l'extension apporte elle-même (`GET_MANIFEST`) — et ceux-là ne
+valent pas le risque décrit au § 4.1 de l'audit.
+
+---
+
 ## 6. Maintenir le flux de nouveautés
 
 **Il n'y a pas de catalogue à alimenter.** TMDB est l'index : un film sorti hier

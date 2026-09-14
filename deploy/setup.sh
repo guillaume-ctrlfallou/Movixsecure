@@ -90,6 +90,20 @@ DARKIWORLD_BASE_URL=
 J1F_BASE_URL=
 SWIFTFLOW_BASE_URL=
 
+# --- Live TV (optionnel) ---------------------------------------------------
+# Vavoo marche sans rien : c'est la source TV utilisable telle quelle.
+# Renseigner seulement si son domaine bouge.
+VAVOO_BASE_URL=
+
+# Northlive demande une cle partenaire qu'on n'a pas : laisser vide, la
+# source restera simplement absente de la liste.
+NORTHLIVE_API_KEY=
+
+# Ton abonnement IPTV personnel, si tu en as un (source \"iptv\", VIP requis).
+XTREAM_URL=
+XTREAM_USER=
+XTREAM_PASS=
+
 # --- Reglages --------------------------------------------------------------
 NUM_WORKERS=2
 JWT_EXPIRES_IN=30d

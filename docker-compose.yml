@@ -111,6 +111,19 @@ services:
       DARKIWORLD_BASE_URL: ${DARKIWORLD_BASE_URL:-}
       J1F_BASE_URL: ${J1F_BASE_URL:-}
       SWIFTFLOW_BASE_URL: ${SWIFTFLOW_BASE_URL:-}
+
+      # --- Live TV ---
+      # Vavoo : seule source TV qui marche sans rien (ni cle, ni VIP, ni
+      # extension). Son domaine tourne comme les autres.
+      VAVOO_BASE_URL: ${VAVOO_BASE_URL:-}
+      # Northlive : cle partenaire. Sans elle la source reste vide — ce n'est
+      # pas une erreur de configuration, c'est une cle qu'on n'a pas.
+      NORTHLIVE_API_KEY: ${NORTHLIVE_API_KEY:-}
+      # Xtream : TON abonnement IPTV, si tu en as un. Reserve aux comptes VIP
+      # cote app (cf. DEPLOIEMENT.md pour se declarer VIP sur son instance).
+      XTREAM_URL: ${XTREAM_URL:-}
+      XTREAM_USER: ${XTREAM_USER:-}
+      XTREAM_PASS: ${XTREAM_PASS:-}
     volumes:
       - mainapi-cache:/app/cache
       - mainapi-data:/app/data
