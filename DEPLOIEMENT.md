@@ -202,10 +202,20 @@ Le VIP n'est pas un contrôle de licence : c'est une ligne dans **ta** base, dan
 la table `access_keys`. Sur ton instance, tu peux te l'accorder :
 
 ```bash
-docker compose exec mysql mysql -u root -p"$DB_ROOT_PASSWORD" movix -e \
-  "INSERT INTO access_keys (key_value, active, duree_validite, expires_at)
-   VALUES ('ma-cle-perso', 1, '10 ans', UNIX_TIMESTAMP() + 315360000);"
+docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -u root movix' <<'SQL'
+INSERT INTO access_keys (key_value, active, duree_validite, expires_at)
+VALUES ('ma-cle-perso', 1, '10 ans', (UNIX_TIMESTAMP() + 315360000) * 1000);
+SQL
 ```
+
+> **`expires_at` est en millisecondes**, pas en secondes. La colonne est un
+> `BIGINT` et `checkVip.js` la lit avec `new Date(expires_at)`, qui interprète
+> un nombre comme des millisecondes. La même convention est utilisée par le
+> code qui délivre les clés (`utils/vipDonations.js` écrit `getTime()`).
+> Une valeur en secondes donne une date de 1970 : la clé est acceptée par
+> MySQL, puis refusée à l'usage avec « clé expirée ».
+>
+> Pour relire la date : `SELECT FROM_UNIXTIME(expires_at/1000) FROM access_keys;`
 
 Puis saisis `ma-cle-perso` dans l'app (Réglages → VIP). Le serveur la vérifie
 dans `access_keys` via l'en-tête `x-access-key` — c'est `API/Mainapi/checkVip.js`
@@ -295,8 +305,33 @@ nature que le reste.
 | Page blanche | CSP trop stricte : voir la console du navigateur, § 5 |
 | Catalogue vide | `TMDB_API_KEY` absente ou invalide |
 | Aucune source ne se résout | Un domaine source a bougé : § 6 |
-| « Not allowed by CORS » | `ALLOWED_ORIGINS` ne contient pas l'hôte utilisé |
+| « Not allowed by CORS » ou « erreur de connexion » à l'activation d'une clé VIP | `ALLOWED_ORIGINS` ne contient pas l'hôte utilisé — le mettre **sans port** |
 | Lecteur noir sur un hébergeur | Le sandbox le gêne — changer de source plutôt que de retirer le sandbox |
+| VIP actif mais les lecteurs réclament de désactiver le sandbox | L'extraction serveur échoue — vérifier `PROXIESEMBED_INTERNAL_URL` (voir ci-dessous) |
+
+### VIP actif mais toujours des iframes
+
+Quand l'extraction serveur échoue, l'app retombe silencieusement sur les
+embeds en iframe — et ce sont eux qui réclament la levée du sandbox. Aucune
+erreur ne remonte : le `catch` d'`extractEmbed` est volontairement muet, un
+hébergeur mort étant le cas normal.
+
+La cause la plus probable est la confusion entre les trois URLs de
+`proxiesembed`. `utils/embedExtraction.js` les essaie dans l'ordre
+`PROXIESEMBED_INTERNAL_URL`, puis `PROXIESEMBED_PUBLIC_URL`, puis
+`PROXY_SERVER_URL` amputé de `/proxy`. Renseigner la publique sans
+l'interne fait donc prendre une URL destinée au navigateur pour un appel
+serveur à serveur : avec une valeur en loopback, `mainapi` s'appelle
+lui-même et aucune source ne se résout.
+
+Vérifier que le conteneur voit bien l'URL interne :
+
+```bash
+docker compose exec mainapi printenv | grep PROXIESEMBED
+```
+
+`PROXIESEMBED_INTERNAL_URL` doit valoir `http://proxiesembed:25569` — un nom
+de service Docker, pas une adresse de loopback.
 | Inaccessible à distance | Tailscale coupé, ou `.env` monté avec `localhost` : § 4 |
 | `COPY failed: no source files were specified` | Ton Docker n'a pas lu les `deploy/Dockerfile.*.dockerignore` — voir ci-dessous |
 | `mainapi` en `Restarting` + `TypeError: PROXIESEMBED_PUBLIC_URL invalide` | `PROXIESEMBED_PUBLIC_URL` absente ou en `http://` sur un hôte non-loopback — voir ci-dessous |

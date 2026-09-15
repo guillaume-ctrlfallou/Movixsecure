@@ -42,7 +42,17 @@ function resolveAllowedDomains() {
     if (!raw) return DEFAULT_ALLOWED_DOMAINS;
     const parsed = raw
         .split(',')
-        .map((entry) => entry.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, ''))
+        .map((entry) => entry
+            .trim()
+            .replace(/^https?:\/\//i, '')   // protocole eventuel
+            .replace(/\/+$/, '')             // slash final
+            // Le port est retire volontairement. `isAllowedStaticOrigin`
+            // compare l'entree au `hostname` de l'origine, qui n'en porte
+            // jamais : une entree `exemple.tld:3001` ne pouvait donc matcher
+            // aucune origine, et le CORS rejetait tout en silence. Accepter
+            // les deux ecritures evite de transformer une habitude anodine en
+            // panne indiagnosticable cote navigateur.
+            .replace(/:\d+$/, ''))
         .filter(Boolean);
     return parsed.length > 0 ? parsed : DEFAULT_ALLOWED_DOMAINS;
 }
