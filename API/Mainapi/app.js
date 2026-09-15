@@ -552,6 +552,7 @@ const {
 const { ensureAccountLinksStorage } = require('./utils/accountLinks');
 const { ensureCloneLinksStorage } = require('./utils/cloneLinks');
 const { ensureOAuthStorage } = require('./utils/oauthStorage');
+const { bootstrapSchema } = require('./db/bootstrapSchema');
 
 const appReady = (async () => {
   try {
@@ -561,6 +562,13 @@ const appReady = (async () => {
       console.log(
         `[Bootstrap] Worker ${process.pid} acquired MySQL schema lock`,
       );
+
+      // Crée d'abord l'intégralité du schéma déclaré dans `db/schema/`.
+      // Les `CREATE TABLE` en dur qui suivent restent en place : ils sont
+      // idempotents, et certains portent des colonnes que le schéma déclaré
+      // ne décrit pas encore. Sans cet appel, 17 des 35 tables n'existaient
+      // sur aucune base neuve — dont `access_keys`, `admins` et `comments`.
+      await bootstrapSchema(pool);
 
       // Créer la table user_sessions si elle n'existe pas
       await pool.execute(`
