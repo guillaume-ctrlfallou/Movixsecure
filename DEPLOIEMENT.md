@@ -202,10 +202,20 @@ Le VIP n'est pas un contrôle de licence : c'est une ligne dans **ta** base, dan
 la table `access_keys`. Sur ton instance, tu peux te l'accorder :
 
 ```bash
-docker compose exec mysql mysql -u root -p"$DB_ROOT_PASSWORD" movix -e \
-  "INSERT INTO access_keys (key_value, active, duree_validite, expires_at)
-   VALUES ('ma-cle-perso', 1, '10 ans', UNIX_TIMESTAMP() + 315360000);"
+docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -u root movix' <<'SQL'
+INSERT INTO access_keys (key_value, active, duree_validite, expires_at)
+VALUES ('ma-cle-perso', 1, '10 ans', (UNIX_TIMESTAMP() + 315360000) * 1000);
+SQL
 ```
+
+> **`expires_at` est en millisecondes**, pas en secondes. La colonne est un
+> `BIGINT` et `checkVip.js` la lit avec `new Date(expires_at)`, qui interprète
+> un nombre comme des millisecondes. La même convention est utilisée par le
+> code qui délivre les clés (`utils/vipDonations.js` écrit `getTime()`).
+> Une valeur en secondes donne une date de 1970 : la clé est acceptée par
+> MySQL, puis refusée à l'usage avec « clé expirée ».
+>
+> Pour relire la date : `SELECT FROM_UNIXTIME(expires_at/1000) FROM access_keys;`
 
 Puis saisis `ma-cle-perso` dans l'app (Réglages → VIP). Le serveur la vérifie
 dans `access_keys` via l'en-tête `x-access-key` — c'est `API/Mainapi/checkVip.js`
