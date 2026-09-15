@@ -307,6 +307,31 @@ nature que le reste.
 | Aucune source ne se résout | Un domaine source a bougé : § 6 |
 | « Not allowed by CORS » ou « erreur de connexion » à l'activation d'une clé VIP | `ALLOWED_ORIGINS` ne contient pas l'hôte utilisé — le mettre **sans port** |
 | Lecteur noir sur un hébergeur | Le sandbox le gêne — changer de source plutôt que de retirer le sandbox |
+| VIP actif mais les lecteurs réclament de désactiver le sandbox | L'extraction serveur échoue — vérifier `PROXIESEMBED_INTERNAL_URL` (voir ci-dessous) |
+
+### VIP actif mais toujours des iframes
+
+Quand l'extraction serveur échoue, l'app retombe silencieusement sur les
+embeds en iframe — et ce sont eux qui réclament la levée du sandbox. Aucune
+erreur ne remonte : le `catch` d'`extractEmbed` est volontairement muet, un
+hébergeur mort étant le cas normal.
+
+La cause la plus probable est la confusion entre les trois URLs de
+`proxiesembed`. `utils/embedExtraction.js` les essaie dans l'ordre
+`PROXIESEMBED_INTERNAL_URL`, puis `PROXIESEMBED_PUBLIC_URL`, puis
+`PROXY_SERVER_URL` amputé de `/proxy`. Renseigner la publique sans
+l'interne fait donc prendre une URL destinée au navigateur pour un appel
+serveur à serveur : avec une valeur en loopback, `mainapi` s'appelle
+lui-même et aucune source ne se résout.
+
+Vérifier que le conteneur voit bien l'URL interne :
+
+```bash
+docker compose exec mainapi printenv | grep PROXIESEMBED
+```
+
+`PROXIESEMBED_INTERNAL_URL` doit valoir `http://proxiesembed:25569` — un nom
+de service Docker, pas une adresse de loopback.
 | Inaccessible à distance | Tailscale coupé, ou `.env` monté avec `localhost` : § 4 |
 | `COPY failed: no source files were specified` | Ton Docker n'a pas lu les `deploy/Dockerfile.*.dockerignore` — voir ci-dessous |
 | `mainapi` en `Restarting` + `TypeError: PROXIESEMBED_PUBLIC_URL invalide` | `PROXIESEMBED_PUBLIC_URL` absente ou en `http://` sur un hôte non-loopback — voir ci-dessous |

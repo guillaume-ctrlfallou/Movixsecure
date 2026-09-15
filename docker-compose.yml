@@ -103,11 +103,30 @@ services:
       MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?MEDIA_SIGNING_SECRET manquant - lance ./deploy/setup.sh}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY manquant - lance ./deploy/setup.sh}
 
-      # URL de proxiesembed vue depuis CE conteneur (appels serveur a serveur).
+      # --- Les trois URLs de proxiesembed, a ne pas confondre ---
+      #
+      # Elles designent le meme service mais ne sont pas interchangeables :
+      # deux sont internes au reseau Docker, la troisieme est remise au
+      # navigateur. `utils/embedExtraction.js` les essaie dans cet ordre —
+      # INTERNAL, puis PUBLIC, puis PROXY_SERVER_URL ampute de /proxy.
+      #
+      # D'ou un piege : renseigner PUBLIC sans renseigner INTERNAL fait
+      # prendre la valeur publique pour les appels serveur a serveur. Avec un
+      # PUBLIC en loopback, mainapi s'appelle alors lui-meme, toutes les
+      # extractions echouent, et l'app retombe sur les embeds en iframe sans
+      # qu'aucune erreur ne remonte (le catch d'extractEmbed est muet : un
+      # hebergeur mort est le cas normal).
+
+      # Relais de flux, serveur a serveur.
       PROXY_SERVER_URL: http://proxiesembed:25569/proxy
 
-      # URL de proxiesembed vue depuis le NAVIGATEUR. A ne pas confondre avec
-      # la precedente : celle-ci est remise au client (sous-titres KissKH).
+      # Extraction des sources, serveur a serveur. Nom de service Docker :
+      # resolu par le DNS interne du reseau compose.
+      PROXIESEMBED_INTERNAL_URL: ${PROXIESEMBED_INTERNAL_URL:-http://proxiesembed:25569}
+
+      # URL de proxiesembed vue depuis le NAVIGATEUR (sous-titres KissKH).
+      # N'est PAS utilisable pour les appels serveur a serveur : c'est le role
+      # de PROXIESEMBED_INTERNAL_URL ci-dessus.
       #
       # Elle doit etre fournie explicitement, car sans elle `routes/kisskh.js`
       # retombe sur l'origine de PROXY_SERVER_URL — donc `http://proxiesembed:25569`,
