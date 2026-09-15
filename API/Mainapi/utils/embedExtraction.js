@@ -183,14 +183,30 @@ function safeEmbedUrl(value) {
     }
 }
 
-/** Signale un échec d'extraction sur Discord. Best effort, jamais bloquant. */
+/**
+ * Signale un échec d'extraction : toujours dans les journaux du serveur, et
+ * sur Discord quand un webhook est configuré.
+ *
+ * Le motif calculé par `describeExtractionFailure` ne partait auparavant que
+ * sur Discord. Une instance sans webhook — le cas d'un déploiement personnel —
+ * n'avait donc aucune trace : `extractEmbed` avale l'erreur (un hébergeur mort
+ * est le cas normal) et l'app retombe sur l'iframe. Un `VIP_REQUIRED`, un
+ * `INTERNAL_KEY_REQUIRED` ou un `ECONNREFUSED` systématique restaient
+ * invisibles, alors que ce sont précisément les pannes de configuration qu'on
+ * veut voir.
+ *
+ * Le délai de garde par (hébergeur, type d'échec) s'applique aux deux canaux :
+ * un hébergeur tombé produit une ligne, pas une par lien de l'épisode.
+ */
 function notifyExtractionFailure(hoster, embedUrl, { kind, label }) {
-    if (!EXTRACTION_WEBHOOK_ENABLED) return;
-
     const key = `${hoster}:${kind}`;
     const nowMs = Date.now();
     if (nowMs < (extractionWebhookCooldown.get(key) || 0)) return;
     extractionWebhookCooldown.set(key, nowMs + EXTRACTION_WEBHOOK_COOLDOWN_MS);
+
+    console.warn(`[extraction] echec ${hoster} — ${label} — ${safeEmbedUrl(embedUrl)}`);
+
+    if (!EXTRACTION_WEBHOOK_ENABLED) return;
 
     // La table est bornée par (hébergeur x type d'échec), mais on purge quand même
     // les entrées périmées pour qu'un pic de codes d'erreur ne la fasse pas enfler.
