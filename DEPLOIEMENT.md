@@ -295,7 +295,7 @@ nature que le reste.
 | Page blanche | CSP trop stricte : voir la console du navigateur, § 5 |
 | Catalogue vide | `TMDB_API_KEY` absente ou invalide |
 | Aucune source ne se résout | Un domaine source a bougé : § 6 |
-| « Not allowed by CORS » | `ALLOWED_ORIGINS` ne contient pas l'hôte utilisé |
+| « Not allowed by CORS » ou « erreur de connexion » à l'activation d'une clé VIP | `ALLOWED_ORIGINS` ne contient pas l'hôte utilisé — le mettre **sans port** |
 | Lecteur noir sur un hébergeur | Le sandbox le gêne — changer de source plutôt que de retirer le sandbox |
 | Inaccessible à distance | Tailscale coupé, ou `.env` monté avec `localhost` : § 4 |
 | `COPY failed: no source files were specified` | Ton Docker n'a pas lu les `deploy/Dockerfile.*.dockerignore` — voir ci-dessous |

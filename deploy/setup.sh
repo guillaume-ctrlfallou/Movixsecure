@@ -63,7 +63,13 @@ PUBLIC_PROXIES_EMBED_API=http://${MOVIX_HOST}:25569
 
 # Origines admises par l'API. Remplace la liste codee en dur, qui contenait
 # des domaines tiers (nakios.site, cinezo.site, filmib.cc...).
-ALLOWED_ORIGINS=${MOVIX_HOST}:3001,localhost:3001,localhost:3000
+#
+# HOSTNAMES SEULS, sans port : `isAllowedStaticOrigin` compare chaque entree
+# au `hostname` de l'origine du navigateur, qui n'en porte jamais. Une entree
+# `exemple.tld:3001` ne correspondait donc a rien et le CORS rejetait tout,
+# avec pour seul symptome une « erreur de connexion » cote interface. Le
+# serveur tolere desormais les deux ecritures, mais on genere la bonne.
+ALLOWED_ORIGINS=${MOVIX_HOST%%:*},localhost
 
 # --- Secrets (generes, ne pas reutiliser ailleurs) -------------------------
 DB_ROOT_PASSWORD=$(secret 40)
