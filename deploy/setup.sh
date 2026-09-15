@@ -90,6 +90,15 @@ DARKIWORLD_BASE_URL=
 J1F_BASE_URL=
 SWIFTFLOW_BASE_URL=
 
+# --- KissKH (dramas asiatiques) --------------------------------------------
+# URL de proxiesembed telle que le NAVIGATEUR la voit. Son validateur
+# n'accepte `http://` que sur du loopback : toute autre machine doit etre en
+# `https://`. En HTTP simple (cas d'un acces par Tailscale), laisser la valeur
+# loopback ci-dessous — mainapi demarre, et seuls les sous-titres KissKH sont
+# indisponibles. Avec un vrai HTTPS, mettre l'origine publique.
+PROXIESEMBED_PUBLIC_URL=http://127.0.0.1:25569
+KISSKH_ENABLED=false
+
 # --- Live TV (optionnel) ---------------------------------------------------
 # Vavoo marche sans rien : c'est la source TV utilisable telle quelle.
 # Renseigner seulement si son domaine bouge.

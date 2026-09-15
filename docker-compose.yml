@@ -103,7 +103,27 @@ services:
       MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?MEDIA_SIGNING_SECRET manquant - lance ./deploy/setup.sh}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY manquant - lance ./deploy/setup.sh}
 
+      # URL de proxiesembed vue depuis CE conteneur (appels serveur a serveur).
       PROXY_SERVER_URL: http://proxiesembed:25569/proxy
+
+      # URL de proxiesembed vue depuis le NAVIGATEUR. A ne pas confondre avec
+      # la precedente : celle-ci est remise au client (sous-titres KissKH).
+      #
+      # Elle doit etre fournie explicitement, car sans elle `routes/kisskh.js`
+      # retombe sur l'origine de PROXY_SERVER_URL — donc `http://proxiesembed:25569`,
+      # que son validateur refuse : il n'accepte `http://` que sur du loopback,
+      # tout autre hote devant etre en `https://`. Le refus leve une TypeError
+      # AU CHARGEMENT du module, hors de tout try/catch : mainapi ne demarre
+      # pas du tout et le cluster boucle sur le redemarrage.
+      #
+      # Le defaut loopback satisfait le validateur et laisse le serveur
+      # demarrer. La consequence est circonscrite a KissKH (dramas asiatiques) :
+      # l'URL remise au client pointerait vers sa propre machine, donc ses
+      # sous-titres ne chargeraient pas. Aucune autre source n'utilise cette
+      # valeur. Sur un deploiement en HTTPS, mettre ici l'origine publique
+      # (https://exemple.tld:25569) pour retablir KissKH.
+      PROXIESEMBED_PUBLIC_URL: ${PROXIESEMBED_PUBLIC_URL:-http://127.0.0.1:25569}
+      KISSKH_ENABLED: ${KISSKH_ENABLED:-false}
       PUBLIC_API_BASE: ${PUBLIC_MAIN_API}
       FRONTEND_BASE_URL: ${PUBLIC_SITE_URL}
       # Remplace la liste de domaines codee en dur (qui contenait des tiers).
