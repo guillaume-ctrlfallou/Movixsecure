@@ -299,6 +299,27 @@ nature que le reste.
 | Lecteur noir sur un hébergeur | Le sandbox le gêne — changer de source plutôt que de retirer le sandbox |
 | Inaccessible à distance | Tailscale coupé, ou `.env` monté avec `localhost` : § 4 |
 | `COPY failed: no source files were specified` | Ton Docker n'a pas lu les `deploy/Dockerfile.*.dockerignore` — voir ci-dessous |
+| `mainapi` en `Restarting` + `TypeError: PROXIESEMBED_PUBLIC_URL invalide` | `PROXIESEMBED_PUBLIC_URL` absente ou en `http://` sur un hôte non-loopback — voir ci-dessous |
+
+### `TypeError: PROXIESEMBED_PUBLIC_URL invalide`
+
+`routes/kisskh.js` valide cette URL **au chargement du module**, hors de tout
+`try/catch` : une valeur refusée empêche `mainapi` de démarrer et le cluster
+boucle sur le redémarrage. Le reste de la stack reste `healthy`, ce qui rend le
+symptôme trompeur — le catalogue continue de s'afficher, puisque le frontend
+interroge TMDB directement, mais plus aucune source ne se résout.
+
+Son validateur n'accepte `http://` que sur `localhost`, `127.0.0.1` ou `[::1]`.
+Tout autre hôte doit être en `https://`. Et le contrôle a lieu **avant** le test
+`KISSKH_ENABLED` : désactiver KissKH ne suffit donc pas à éviter le plantage.
+
+Le `.env` généré met `http://127.0.0.1:25569`, qui satisfait le validateur. La
+conséquence est limitée à KissKH : l'URL remise au client pointerait vers sa
+propre machine, donc ses sous-titres ne chargent pas. Aucune autre source
+n'utilise cette valeur.
+
+Sur un déploiement en HTTPS, remplace-la par l'origine publique
+(`https://exemple.tld:25569`) et remets `KISSKH_ENABLED=true`.
 
 ### Si le build échoue sur « COPY failed »
 
