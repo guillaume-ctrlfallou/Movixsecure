@@ -155,6 +155,49 @@ Si un écran reste blanc, ouvre la console du navigateur : une CSP trop stricte
 s'y signale explicitement. Pour diagnostiquer, décommente `CSP_DISABLED: "true"`
 dans le service `frontend` du compose — **et remets-le après**.
 
+### Les lecteurs qui réclament de désactiver le sandbox
+
+Plusieurs hébergeurs détectent l'attribut `sandbox` et refusent de servir la
+vidéo. Ce n'est pas un défaut de l'app : ils sont rémunérés au popunder, et un
+`window.open()` qui échoue leur signale qu'ils ne seront pas payés.
+
+Le confinement le plus strict coûte donc une partie du catalogue — celle que
+ces hébergeurs sont seuls à proposer. `VITE_EMBED_SANDBOX` permet de choisir
+où se placer :
+
+| Valeur | Fenêtres | Détournement d'onglet | Téléchargement forcé | Catalogue |
+|---|---|---|---|---|
+| `strict` (défaut) | bloquées | bloqué | bloqué | réduit |
+| `balanced` | **autorisées** | bloqué | bloqué | complet |
+| `off` | autorisées | **autorisé** | **autorisé** | complet |
+
+`balanced` est le bon compromis dans la quasi-totalité des cas. Il rend aux
+hébergeurs la seule chose qu'ils testent — la capacité d'ouvrir une fenêtre —
+et rien d'autre. Surtout, `allow-popups-to-escape-sandbox` reste absent : la
+fenêtre ouverte **hérite du même sandbox**, donc le popunder est lui-même
+confiné et ne peut ni détourner l'onglet, ni déclencher de téléchargement, ni
+rouvrir d'autres fenêtres.
+
+Ce qu'on échange en passant de `strict` à `balanced`, c'est une nuisance
+publicitaire contre de la disponibilité — pas une protection contre un risque
+d'infection. Les trois vecteurs dangereux restent fermés dans les deux cas.
+
+`off` n'a aucun intérêt : il satisfait les mêmes hébergeurs que `balanced`
+tout en rouvrant le détournement d'onglet, qui est précisément le scénario
+« je regarde un film et mon onglet part sur une page vérolée ».
+
+Pour changer — la valeur est figée dans le bundle au build :
+
+```bash
+echo 'VITE_EMBED_SANDBOX=balanced' >> .env
+docker compose build frontend
+docker compose up -d --force-recreate frontend
+```
+
+Un bloqueur de publicité dans le navigateur (uBlock Origin) se combine bien
+avec `balanced` : l'hébergeur voit sa fenêtre s'ouvrir, le bloqueur en coupe
+le contenu.
+
 ### Vérifier le confinement des lecteurs
 
 Dans l'inspecteur, sur une page de lecture, l'iframe de l'hébergeur doit porter :

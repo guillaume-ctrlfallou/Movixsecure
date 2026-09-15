@@ -235,6 +235,10 @@ services:
         VITE_TURNSTILE_INVISIBLE_SITEKEY: ${VITE_TURNSTILE_INVISIBLE_SITEKEY:-}
         VITE_SUPPORT_TELEGRAM_URL: ${VITE_SUPPORT_TELEGRAM_URL:-}
         VITE_APP_BUILD_ID: ${VITE_APP_BUILD_ID:-selfhosted}
+        # Confinement des iframes d'hebergeurs : strict (defaut) | balanced | off.
+        # Fige dans le bundle au build — un changement impose
+        # `docker compose build frontend`. Voir src/utils/embedSandbox.ts.
+        VITE_EMBED_SANDBOX: ${VITE_EMBED_SANDBOX:-strict}
     environment:
       PORT: 3001
       # Lues par server/securityHeaders.js pour construire le connect-src.
