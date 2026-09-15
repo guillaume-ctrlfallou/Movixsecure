@@ -33,6 +33,26 @@
 /** Marqueur d'interface, sans valeur côté serveur. Voir l'en-tête. */
 export const ADMIN_BYPASS_TOKEN = 'movix-admin-turnstile-bypass';
 
+/**
+ * Marqueur émis quand aucune clé de site Turnstile n'est configurée.
+ *
+ * Même logique que `ADMIN_BYPASS_TOKEN`, pour un cas différent : une instance
+ * auto-hébergée qui n'a pas de compte Cloudflare. Le serveur saute déjà la
+ * vérification dans ce cas (`verifyTurnstileFromRequest` retourne
+ * `{ valid: true }` quand `TURNSTILE_SECRET_KEY` est absent), mais l'interface,
+ * elle, restait bloquée : le widget émettait une chaîne vide, et les appelants
+ * qui conditionnent leur action à un jeton non vide n'avançaient jamais.
+ *
+ * C'est ce qui rendait la source SwiftFlux inutilisable sans Turnstile — sa
+ * porte attendait un jeton qui ne pouvait pas arriver.
+ *
+ * Ce marqueur n'ouvre aucun droit : s'il part vers un serveur qui, lui, a bien
+ * une clé secrète, Cloudflare le rejette comme n'importe quelle chaîne
+ * inventée. Il ne débloque que les instances qui ont déjà décidé de se passer
+ * du challenge.
+ */
+export const TURNSTILE_DISABLED_TOKEN = 'movix-turnstile-not-configured';
+
 /** `unknown` tant que le serveur n'a pas répondu : on n'affiche rien encore. */
 export type TurnstileBypassStatus = 'unknown' | 'bypass' | 'challenge';
 

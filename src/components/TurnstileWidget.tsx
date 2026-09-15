@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 import { useTurnstileBypass } from '../hooks/useTurnstileBypass';
-import { ADMIN_BYPASS_TOKEN } from '../utils/turnstileBypass';
+import { ADMIN_BYPASS_TOKEN, TURNSTILE_DISABLED_TOKEN } from '../utils/turnstileBypass';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
@@ -64,8 +64,12 @@ const TurnstileWidget: React.FC<TurnstileWidgetProps> = ({
       return undefined;
     }
 
+    // Aucune clé de site configurée : instance sans Turnstile. On émet le
+    // marqueur plutôt qu'une chaîne vide, sinon tout appelant qui attend un
+    // jeton non vide reste bloqué indéfiniment (cf. SwiftfluxGate). Le serveur
+    // saute la vérification de son côté quand TURNSTILE_SECRET_KEY est absent.
     if (!resolvedSiteKey) {
-      handleTokenChange?.('');
+      handleTokenChange?.(TURNSTILE_DISABLED_TOKEN);
       return undefined;
     }
 
