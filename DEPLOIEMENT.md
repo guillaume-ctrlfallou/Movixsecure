@@ -49,14 +49,45 @@ docker compose logs -f mainapi
 
 `setup.sh` demande deux choses : l'adresse sous laquelle tu accéderas au site,
 et ta clé TMDB. Tout le reste — mots de passe MySQL et Redis, `JWT_SECRET`,
-`MEDIA_SIGNING_SECRET`, `INTERNAL_API_KEY` — est tiré de `/dev/urandom`.
+`MEDIA_SIGNING_SECRET`, `INTERNAL_API_KEY`, la clé VIP de l'instance — est tiré
+de `/dev/urandom`.
+
+Sans terminal (script, CI), passe les deux réponses en variables :
+
+```bash
+MOVIX_HOST=mon-pc.tail1234.ts.net TMDB_API_KEY=xxxx ./deploy/setup.sh
+```
 
 Aucun secret n'a de valeur par défaut dans le compose : s'il en manque un,
 `docker compose up` refuse de démarrer au lieu de tourner avec une valeur
 faible.
 
-Au premier démarrage, `mainapi` crée ses tables (`CREATE TABLE IF NOT EXISTS`).
-Compte une minute avant que l'API réponde — MySQL doit finir son initialisation.
+Au premier démarrage, `mainapi` crée les 35 tables du schéma et inscrit la clé
+VIP de l'instance. Compte une minute avant que l'API réponde — MySQL doit finir
+son initialisation. Dans les journaux :
+
+```
+[Bootstrap] Schema : 35 tables verifiees.
+[Bootstrap] Cle VIP auto-hebergee active.
+```
+
+**Rien d'autre à faire.** Le VIP s'active tout seul dans le navigateur (§ 5 bis)
+et le repli sur les lecteurs en iframe fonctionne (§ 5) : pas de requête SQL,
+pas de réglage à saisir.
+
+### Mettre à jour une installation existante
+
+```bash
+git pull
+./deploy/setup.sh      # ajoute les nouvelles variables, ne modifie aucune existante
+docker compose build
+docker compose up -d --force-recreate
+```
+
+`setup.sh` détecte le `.env` existant et passe en **mise à niveau** : il n'ajoute
+que les variables manquantes, sauvegarde l'ancien fichier, et ne touche à aucune
+valeur présente. C'est important : MySQL fixe ses mots de passe à la création du
+volume, et un `.env` aux secrets régénérés ne pourrait plus s'y connecter.
 
 ---
 
@@ -161,35 +192,55 @@ Plusieurs hébergeurs détectent l'attribut `sandbox` et refusent de servir la
 vidéo. Ce n'est pas un défaut de l'app : ils sont rémunérés au popunder, et un
 `window.open()` qui échoue leur signale qu'ils ne seront pas payés.
 
-Le confinement le plus strict coûte donc une partie du catalogue — celle que
-ces hébergeurs sont seuls à proposer. `VITE_EMBED_SANDBOX` permet de choisir
-où se placer :
+### Comment l'app choisit entre flux direct et iframe
+
+```
+1. Extraction côté serveur (VIP de l'instance, actif d'office)
+   → réussie : flux lu en direct, la page de l'hébergeur n'est JAMAIS chargée,
+               donc aucune de ses publicités
+   → échouée  : repli ↓
+2. Iframe de l'hébergeur, confinée par `sandbox`
+   → le film est lu, avec la publicité de l'hébergeur
+```
+
+Les flux extraits sont ajoutés comme sources directes et placés en tête de
+l'ordre de priorité (`WatchMovie.tsx`). Une iframe n'apparaît donc que
+lorsque l'extraction n'a rien donné pour ce lien — c'est le repli. Deux
+sources n'y passent jamais, par conception : **frembed** et **vostfr**
+(lecteurs d'agrégateurs chargés tels quels).
+
+### Pourquoi le repli ouvre les fenêtres
+
+Le confinement le plus strict ferait échouer ce repli chez les hébergeurs qui
+testent `window.open()` : on perdrait les films qu'ils sont seuls à proposer,
+au lieu de les lire avec leur publicité. `VITE_EMBED_SANDBOX` règle ce point :
 
 | Valeur | Fenêtres | Détournement d'onglet | Téléchargement forcé | Catalogue |
 |---|---|---|---|---|
-| `strict` (défaut) | bloquées | bloqué | bloqué | réduit |
-| `balanced` | **autorisées** | bloqué | bloqué | complet |
+| **`balanced` (défaut)** | autorisées | bloqué | bloqué | complet |
+| `strict` | bloquées | bloqué | bloqué | réduit |
 | `off` | autorisées | **autorisé** | **autorisé** | complet |
 
-`balanced` est le bon compromis dans la quasi-totalité des cas. Il rend aux
-hébergeurs la seule chose qu'ils testent — la capacité d'ouvrir une fenêtre —
-et rien d'autre. Surtout, `allow-popups-to-escape-sandbox` reste absent : la
-fenêtre ouverte **hérite du même sandbox**, donc le popunder est lui-même
-confiné et ne peut ni détourner l'onglet, ni déclencher de téléchargement, ni
-rouvrir d'autres fenêtres.
+`balanced` rend aux hébergeurs la seule chose qu'ils testent — la capacité
+d'ouvrir une fenêtre — et rien d'autre. Surtout, `allow-popups-to-escape-sandbox`
+reste absent : la fenêtre ouverte **hérite du même sandbox**, donc le popunder
+est lui-même confiné et ne peut ni détourner l'onglet, ni déclencher de
+téléchargement, ni rouvrir d'autres fenêtres.
 
-Ce qu'on échange en passant de `strict` à `balanced`, c'est une nuisance
-publicitaire contre de la disponibilité — pas une protection contre un risque
-d'infection. Les trois vecteurs dangereux restent fermés dans les deux cas.
+On échange donc une nuisance publicitaire contre de la disponibilité — pas une
+protection contre un risque d'infection. Les trois vecteurs dangereux restent
+fermés.
 
-`off` n'a aucun intérêt : il satisfait les mêmes hébergeurs que `balanced`
-tout en rouvrant le détournement d'onglet, qui est précisément le scénario
-« je regarde un film et mon onglet part sur une page vérolée ».
+`strict` reste disponible pour qui préfère perdre ces films plutôt que voir une
+fenêtre publicitaire s'ouvrir. `off` n'a aucun intérêt : il satisfait les mêmes
+hébergeurs que `balanced` en rouvrant le détournement d'onglet, précisément le
+scénario « je regarde un film et mon onglet part sur une page vérolée ». Une
+valeur mal orthographiée retombe sur `balanced`, jamais sur `off`.
 
 Pour changer — la valeur est figée dans le bundle au build :
 
 ```bash
-echo 'VITE_EMBED_SANDBOX=balanced' >> .env
+sed -i 's/^VITE_EMBED_SANDBOX=.*/VITE_EMBED_SANDBOX=strict/' .env
 docker compose build frontend
 docker compose up -d --force-recreate frontend
 ```
@@ -200,14 +251,18 @@ le contenu.
 
 ### Vérifier le confinement des lecteurs
 
-Dans l'inspecteur, sur une page de lecture, l'iframe de l'hébergeur doit porter :
+Dans l'inspecteur, sur une page de lecture en iframe, l'attribut doit être :
 
 ```html
-sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-popups"
 ```
 
-L'absence de `allow-top-navigation` et `allow-popups` est ce qui empêche
-l'hébergeur de détourner ton onglet ou d'ouvrir des popunders.
+(sans `allow-popups` en mode `strict`)
+
+Ce qui compte, ce sont les **absents** : ni `allow-top-navigation`, ni
+`allow-popups-to-escape-sandbox`, ni `allow-downloads`, ni `allow-modals`. Ce
+sont eux qui empêchent l'hébergeur de détourner ton onglet, de pousser un
+fichier ou d'afficher une fausse alerte.
 
 ### L'extension navigateur
 
@@ -239,10 +294,41 @@ lecteur consomme directement, sans proxy ni en-tête particulier.
 Northlive apparaîtra vide tant que `NORTHLIVE_API_KEY` n'est pas renseignée.
 Ce n'est pas une erreur de configuration : c'est une clé qu'on n'a pas.
 
-### Se déclarer VIP sur sa propre instance
+### Le VIP de l'instance — automatique
 
 Le VIP n'est pas un contrôle de licence : c'est une ligne dans **ta** base, dans
-la table `access_keys`. Sur ton instance, tu peux te l'accorder :
+la table `access_keys`. Sur une instance personnelle, il ne sert qu'à activer
+l'extraction côté serveur (le mode de lecture sans page d'hébergeur, donc sans
+leurs publicités) et la source IPTV.
+
+**Il est actif d'office.** `setup.sh` génère `SELFHOST_VIP_KEY`, puis :
+
+- le serveur l'inscrit dans `access_keys` à chaque démarrage, sans date
+  d'expiration (`API/Mainapi/db/selfhostVip.js`) ;
+- le frontend la reçoit au build et la pose dans le navigateur au premier
+  chargement (`src/utils/selfhostVip.ts`).
+
+Aucune requête SQL, aucune saisie dans les réglages, et aucun compte requis.
+
+Détails utiles :
+
+- **Portée.** La clé est figée dans le bundle, donc lisible par quiconque
+  charge le site. Parfait derrière Tailscale. Si l'instance devient publique,
+  vide `SELFHOST_VIP_KEY` dans `.env` puis rebuild : chaque visiteur serait
+  sinon VIP, et pourrait se servir de ton serveur comme relais d'extraction.
+- **Rotation.** Changer la valeur dans `.env` puis
+  `docker compose build frontend && docker compose up -d --force-recreate`
+  désactive l'ancienne clé au démarrage. Les clés créées à la main ne sont
+  jamais touchées.
+- **Retrait.** Si tu supprimes la clé depuis Réglages, elle n'est pas reposée
+  au chargement suivant : c'est respecté comme un choix.
+- **Clé déjà présente.** Un navigateur qui a déjà une clé (saisie à la main)
+  la garde.
+
+### Ajouter une clé à la main (optionnel)
+
+Utile seulement pour une clé supplémentaire, par exemple sur une instance
+publique où la clé automatique est coupée :
 
 ```bash
 docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -u root movix' <<'SQL'
@@ -322,15 +408,25 @@ docker compose down -v                 # ⚠️ arrêt + SUPPRESSION des donnée
 **Sauvegarde** — comptes, profils, historique :
 
 ```bash
-docker compose exec mysql mysqldump -u root -p"$DB_ROOT_PASSWORD" movix \
+docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqldump -u root movix' \
   > sauvegarde-$(date +%F).sql
 ```
+
+(le mot de passe est lu dans l'environnement du conteneur : rien à taper, et
+il n'apparaît ni dans ton historique ni dans la ligne de commande)
 
 **Mise à jour** :
 
 ```bash
-git pull && docker compose build && docker compose up -d
+git pull
+./deploy/setup.sh
+docker compose build
+docker compose up -d --force-recreate
 ```
+
+`setup.sh` ne fait qu'ajouter les variables apparues depuis ta dernière
+installation (voir § 3). Le `--force-recreate` garantit que chaque conteneur
+repart avec sa nouvelle image et ses nouvelles variables.
 
 **Réduire l'empreinte** — si tu ne regardes pas de chaînes commerciales
 protégées, `API/proxiesembed/drmproxy/` (70 extracteurs DRM Widevine) ne te sert
@@ -349,10 +445,35 @@ nature que le reste.
 | Catalogue vide | `TMDB_API_KEY` absente ou invalide |
 | Aucune source ne se résout | Un domaine source a bougé : § 6 |
 | « Not allowed by CORS » ou « erreur de connexion » à l'activation d'une clé VIP | `ALLOWED_ORIGINS` ne contient pas l'hôte utilisé — le mettre **sans port** |
-| Lecteur noir sur un hébergeur | Le sandbox le gêne — changer de source plutôt que de retirer le sandbox |
-| VIP actif mais les lecteurs réclament de désactiver le sandbox | L'extraction serveur échoue — vérifier `PROXIESEMBED_INTERNAL_URL` (voir ci-dessous) |
+| Lecteur noir sur un hébergeur | Mode `strict` actif — voir § 5, ou changer de source |
+| Un lecteur réclame de désactiver le sandbox | Mode `strict` actif, ou image frontend antérieure au défaut `balanced` — `docker compose build frontend` |
+| Aucune source en lecture directe, tout passe par des iframes | L'extraction serveur échoue — voir ci-dessous |
+| Pas de ligne `Cle VIP auto-hebergee active` au démarrage | `SELFHOST_VIP_KEY` absente : relancer `./deploy/setup.sh`, puis rebuild |
+| Inaccessible à distance | Tailscale coupé, ou `.env` monté avec `localhost` : § 4 |
+| `COPY failed: no source files were specified` | Ton Docker n'a pas lu les `deploy/Dockerfile.*.dockerignore` — voir ci-dessous |
+| `mainapi` en `Restarting` + `TypeError: PROXIESEMBED_PUBLIC_URL invalide` | `PROXIESEMBED_PUBLIC_URL` absente ou en `http://` sur un hôte non-loopback — voir ci-dessous |
 
-### VIP actif mais toujours des iframes
+### Tout passe par des iframes
+
+Le motif de chaque échec d'extraction est journalisé :
+
+```bash
+docker compose logs -f mainapi | grep -i extraction
+```
+
+```
+[extraction] echec voe — HTTP 403 — https://voe.sx/e/abc
+[extraction] echec vidmoly — ECONNREFUSED — https://vidmoly.to/embed-xyz
+```
+
+| Motif | Sens |
+|---|---|
+| `HTTP 404` / `HTTP 410` | Fichier supprimé chez l'hébergeur — normal, le repli prend le relais |
+| `HTTP 403` sans code | L'hébergeur bloque l'IP du serveur |
+| `VIP_REQUIRED` | `proxiesembed` refuse la clé — vérifier la ligne `Cle VIP auto-hebergee active` |
+| `INTERNAL_KEY_REQUIRED` | `INTERNAL_API_KEY` différente entre les deux services |
+| `ECONNREFUSED` / `ETIMEDOUT` | `proxiesembed` injoignable — voir ci-dessous |
+| `unknown` + message | L'hébergeur a changé son obfuscation : l'extracteur est à mettre à jour |
 
 Quand l'extraction serveur échoue, l'app retombe silencieusement sur les
 embeds en iframe — et ce sont eux qui réclament la levée du sandbox. Aucune
@@ -370,14 +491,11 @@ lui-même et aucune source ne se résout.
 Vérifier que le conteneur voit bien l'URL interne :
 
 ```bash
-docker compose exec mainapi printenv | grep PROXIESEMBED
+docker compose exec mainapi sh -c 'printenv | grep PROXIESEMBED'
 ```
 
 `PROXIESEMBED_INTERNAL_URL` doit valoir `http://proxiesembed:25569` — un nom
 de service Docker, pas une adresse de loopback.
-| Inaccessible à distance | Tailscale coupé, ou `.env` monté avec `localhost` : § 4 |
-| `COPY failed: no source files were specified` | Ton Docker n'a pas lu les `deploy/Dockerfile.*.dockerignore` — voir ci-dessous |
-| `mainapi` en `Restarting` + `TypeError: PROXIESEMBED_PUBLIC_URL invalide` | `PROXIESEMBED_PUBLIC_URL` absente ou en `http://` sur un hôte non-loopback — voir ci-dessous |
 
 ### `TypeError: PROXIESEMBED_PUBLIC_URL invalide`
 
@@ -418,17 +536,30 @@ sed -i 's/^# API$/API/' .dockerignore
 
 ---
 
-## 9. Ce qui n'a pas été vérifié
+## 9. Ce qui a été vérifié, et comment
 
-Honnêteté sur les limites de ce guide :
+- **Build Docker et démarrage** : la stack complète a été construite et lancée
+  sur un serveur Ubuntu réel, lecture vidéo comprise.
+- **Schéma** : les 35 tables de `db/schema/` sont créées au démarrage
+  (`db/bootstrapSchema.js`), vérifié sur un serveur MariaDB réel, idempotent.
+- **Clé VIP de l'instance** : inscription, redémarrage sans doublon, rotation
+  et clé manuelle préservée, vérifiés sur un serveur réel. L'acceptation de la
+  clé est vérifiée par les **deux** codes qui la relisent — `checkVip.js` et
+  `_check_vip` de `proxiesembed/server.py` — exécutés sur les lignes réelles.
+- **Pose de la clé dans le navigateur** : les huit cas (navigateur vierge, clé
+  existante, retrait volontaire, refus serveur, stockage inaccessible…) testés
+  sur le module compilé, puis dans Chromium sur le bundle de production — où
+  la toute première lecture de `is_vip` par l'application renvoie déjà
+  `"true"` : la clé est en place avant que l'app ne s'exécute, donc dès le
+  premier film.
+- **`setup.sh`** : installation neuve, installation non interactive, refus sans
+  clé TMDB, mise à niveau d'un `.env` ancien (valeurs existantes intactes,
+  ligne à ligne) et relance sans effet.
+- **Transmission par Docker Compose** : la même clé part au serveur et au build
+  du frontend ; `balanced` s'applique même sans la variable.
+- `npm run build` passe ; le préréglage de sandbox est vérifié pour chaque
+  valeur, faute de frappe comprise.
 
-- **Le build Docker n'a pas pu être testé** : l'environnement où ces fichiers
-  ont été écrits n'a pas de démon Docker. Le YAML est valide et les Dockerfiles
-  suivent les contraintes réelles des dépendances (glibc pour les modules
-  natifs de `mainapi`, roues manylinux pour `proxiesembed`), mais le premier
-  `docker compose build` peut demander un ajustement. Signale l'erreur, elle se
-  corrigera vite.
-- **Le schéma MySQL s'auto-amorce** via les `CREATE TABLE IF NOT EXISTS` de
-  `app.js`, mais tout le schéma de `db/schema/` n'est pas couvert au boot.
-  Si une route échoue sur une table manquante, sa définition est là.
-- `npm run build` du frontend, lui, **a été exécuté et passe**.
+Limite connue : les extracteurs d'hébergeurs dépendent de sites tiers qui
+changent sans prévenir. Aucune instance — publique comprise — n'a 100 % de
+sources en lecture directe ; c'est ce que le repli iframe couvre.

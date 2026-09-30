@@ -1,3 +1,6 @@
+// Doit rester le PREMIER import : pose la clé VIP auto-hébergée avant que
+// l'application ne s'évalue. Voir src/utils/selfhostVip.ts.
+import './utils/selfhostVip'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HelmetProvider } from 'react-helmet-async'

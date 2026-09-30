@@ -21,14 +21,23 @@
 // strict coûte donc une partie du catalogue — celle qui n'existe que chez ces
 // hébergeurs-là.
 //
-// L'arbitrage dépend du déploiement, pas du code. Il se règle donc par
-// `VITE_EMBED_SANDBOX`, et la valeur par défaut reste la plus stricte.
+// L'arbitrage se règle par `VITE_EMBED_SANDBOX`. La valeur par défaut est
+// `balanced`, et ce n'est pas un relâchement arbitraire : une iframe n'est
+// affichée que lorsque l'extraction serveur n'a pas produit de flux direct
+// pour ce lien (`WatchMovie.tsx` ajoute les flux résolus comme sources
+// directes, placées en tête de l'ordre de priorité). L'iframe EST le repli.
+// Un repli que le sandbox strict fait échouer n'en est pas un : on perd le
+// film au lieu de le lire avec la publicité de l'hébergeur.
+//
+// `strict` reste disponible pour qui préfère perdre ces films plutôt que voir
+// une fenêtre publicitaire s'ouvrir.
 
 type SandboxPreset = 'strict' | 'balanced' | 'off';
 
 const PRESETS: Record<Exclude<SandboxPreset, 'off'>, string> = {
   /**
-   * Défaut. Aucune des quatre capacités de nuisance.
+   * Aucune des quatre capacités de nuisance. Fait échouer le repli iframe
+   * chez les hébergeurs qui testent `window.open()`.
    *
    * `allow-scripts` + `allow-same-origin` ensemble sont un anti-pattern connu
    * UNIQUEMENT quand l'iframe est de même origine que la page porteuse : elle
@@ -39,7 +48,7 @@ const PRESETS: Record<Exclude<SandboxPreset, 'off'>, string> = {
   strict: 'allow-scripts allow-same-origin allow-forms allow-presentation',
 
   /**
-   * Compromis : `allow-popups` en plus, rien d'autre.
+   * Défaut. `allow-popups` en plus, rien d'autre.
    *
    * Suffit à satisfaire les hébergeurs qui testent `window.open()`, donc à
    * récupérer le catalogue qu'ils sont seuls à servir. En échange, leurs
@@ -60,9 +69,11 @@ const PRESETS: Record<Exclude<SandboxPreset, 'off'>, string> = {
 
 const resolvePreset = (): SandboxPreset => {
   const raw = (import.meta.env.VITE_EMBED_SANDBOX ?? '').trim().toLowerCase();
-  if (raw === 'balanced') return 'balanced';
+  if (raw === 'strict') return 'strict';
   if (raw === 'off') return 'off';
-  return 'strict';
+  // Absent, vide ou inconnu : le repli fonctionnel. Une faute de frappe ne
+  // doit pas faire basculer silencieusement vers `off`.
+  return 'balanced';
 };
 
 const PRESET = resolvePreset();

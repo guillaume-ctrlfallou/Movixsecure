@@ -37,7 +37,7 @@ Ce tableau est tenu à jour ; les constats détaillés en § 4 décrivent l'éta
 | # | Constat | État |
 |---|---|---|
 | 1 | Extension navigateur | ⬜ Non corrigé — **ne pas installer l'extension** (décision retenue) |
-| 2 | Iframes sans sandbox | ✅ Corrigé — politique unique `src/utils/embedSandbox.ts` |
+| 2 | Iframes sans sandbox | ✅ Corrigé — politique unique `src/utils/embedSandbox.ts`. Défaut `balanced` : fenêtres autorisées pour que le repli iframe fonctionne, mais confinées (ni détournement d'onglet, ni téléchargement, ni fausses alertes). Lecture directe sans iframe dès que l'extraction réussit, grâce à la clé VIP de l'instance activée d'office |
 | 3 | Aucune CSP | ✅ Corrigé — `server/securityHeaders.js` |
 | 4 | JWT sans expiration | ✅ Corrigé — 30 j, réglable par `JWT_EXPIRES_IN` |
 | 5 | Token en `postMessage(*)` | ⬜ Sans objet — le pont ne sert que si l'extension est installée |
