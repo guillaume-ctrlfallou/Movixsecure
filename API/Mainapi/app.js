@@ -553,6 +553,7 @@ const { ensureAccountLinksStorage } = require('./utils/accountLinks');
 const { ensureCloneLinksStorage } = require('./utils/cloneLinks');
 const { ensureOAuthStorage } = require('./utils/oauthStorage');
 const { bootstrapSchema } = require('./db/bootstrapSchema');
+const { provisionSelfhostVip } = require('./db/selfhostVip');
 
 const appReady = (async () => {
   try {
@@ -569,6 +570,11 @@ const appReady = (async () => {
       // ne décrit pas encore. Sans cet appel, 17 des 35 tables n'existaient
       // sur aucune base neuve — dont `access_keys`, `admins` et `comments`.
       await bootstrapSchema(pool);
+
+      // Cle VIP de l'instance auto-hebergee (SELFHOST_VIP_KEY). Juste apres le
+      // schema, puisqu'elle s'inscrit dans `access_keys`. Ne leve jamais :
+      // un echec est journalise et l'instance demarre sans.
+      await provisionSelfhostVip(pool);
 
       // Créer la table user_sessions si elle n'existe pas
       await pool.execute(`

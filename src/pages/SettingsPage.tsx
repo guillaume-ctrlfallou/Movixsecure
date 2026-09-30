@@ -86,6 +86,7 @@ import {
   type SessionDeviceType,
 } from '../utils/sessionDevice';
 import { getOverlayPortalRoot } from '@/utils/overlayPortal';
+import { markSelfhostVipDismissed } from '../utils/selfhostVip';
 
 const API_URL = import.meta.env.VITE_MAIN_API;
 
@@ -1265,6 +1266,9 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleRemovePremiumKey = () => {
+    // Si c'est la clé de l'instance auto-hébergée, ne pas la reposer au
+    // prochain chargement : le retrait est un choix de l'utilisateur.
+    markSelfhostVipDismissed(localStorage.getItem('access_code'));
     localStorage.removeItem('is_vip');
     localStorage.removeItem('access_code');
     localStorage.removeItem('access_code_expires');

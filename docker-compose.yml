@@ -96,6 +96,12 @@ services:
 
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant - lance ./deploy/setup.sh}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30d}
+
+      # Cle VIP de l'instance, inscrite en base a chaque demarrage
+      # (db/selfhostVip.js). La MEME valeur part au build du frontend, qui la
+      # pose dans le navigateur : aucune requete SQL ni saisie manuelle.
+      # Vide = fonctionnalite coupee (a faire si l'instance est publique).
+      SELFHOST_VIP_KEY: ${SELFHOST_VIP_KEY:-}
       TMDB_API_KEY: ${TMDB_API_KEY:?TMDB_API_KEY manquant - cle gratuite sur themoviedb.org}
 
       # Secret partage avec proxiesembed : les deux DOIVENT etre identiques,
@@ -235,10 +241,13 @@ services:
         VITE_TURNSTILE_INVISIBLE_SITEKEY: ${VITE_TURNSTILE_INVISIBLE_SITEKEY:-}
         VITE_SUPPORT_TELEGRAM_URL: ${VITE_SUPPORT_TELEGRAM_URL:-}
         VITE_APP_BUILD_ID: ${VITE_APP_BUILD_ID:-selfhosted}
-        # Confinement des iframes d'hebergeurs : strict (defaut) | balanced | off.
-        # Fige dans le bundle au build — un changement impose
-        # `docker compose build frontend`. Voir src/utils/embedSandbox.ts.
-        VITE_EMBED_SANDBOX: ${VITE_EMBED_SANDBOX:-strict}
+        # Confinement des iframes d'hebergeurs : balanced (defaut) | strict | off.
+        # Voir src/utils/embedSandbox.ts.
+        VITE_EMBED_SANDBOX: ${VITE_EMBED_SANDBOX:-balanced}
+        # Meme valeur que SELFHOST_VIP_KEY cote mainapi. Voir src/utils/selfhostVip.ts.
+        VITE_SELFHOST_VIP_KEY: ${SELFHOST_VIP_KEY:-}
+        # Ces valeurs sont figees dans le bundle : un changement impose
+        # `docker compose build frontend`, un simple redemarrage ne suffit pas.
     environment:
       PORT: 3001
       # Lues par server/securityHeaders.js pour construire le connect-src.
