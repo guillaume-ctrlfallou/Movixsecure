@@ -96,6 +96,21 @@ DARKIWORLD_BASE_URL=
 J1F_BASE_URL=
 SWIFTFLOW_BASE_URL=
 
+# --- Confinement des iframes d'hebergeurs ----------------------------------
+# strict   : aucune fenetre, aucune navigation de l'onglet, aucun telechargement.
+#            Le plus sur. Mais plusieurs hebergeurs detectent le sandbox et
+#            refusent de servir la video : on perd le catalogue qu'ils sont
+#            seuls a proposer.
+# balanced : autorise les fenetres, et rien d'autre. Suffit a ces hebergeurs.
+#            Leurs popunders s'ouvrent — mais herittent du meme sandbox, donc
+#            ils ne peuvent ni detourner l'onglet, ni telecharger, ni rouvrir.
+# off      : aucun confinement. Comportement d'origine du projet. Deconseille :
+#            `balanced` satisfait les memes hebergeurs sans ce risque.
+#
+# Fige dans le bundle au build : apres un changement, relancer
+#   docker compose build frontend && docker compose up -d --force-recreate frontend
+VITE_EMBED_SANDBOX=strict
+
 # --- KissKH (dramas asiatiques) --------------------------------------------
 # URL de proxiesembed telle que le NAVIGATEUR la voit. Son validateur
 # n'accepte `http://` que sur du loopback : toute autre machine doit etre en
