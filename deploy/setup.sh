@@ -107,7 +107,7 @@ TMDB_API_KEY=${TMDB_KEY}
 
 # Domaines des sources. Vides = valeurs par defaut (API/Mainapi/config/sources.js).
 # Quand une source demenage, c'est ICI qu'on corrige — jamais dans le code —
-# puis `docker compose up -d mainapi` (pas de rebuild). Les domaines effectifs
+# puis \`docker compose up -d mainapi\` (pas de rebuild). Les domaines effectifs
 # s'affichent au demarrage : docker compose logs mainapi | grep '\[sources\]'
 WIFLIX_BASE_URL=
 COFLIX_BASE_URL=
@@ -122,6 +122,19 @@ ANIME_SAMA_BASE_URL=
 # PurStream trouve son domaine d'API tout seul via cette page de statut.
 PURSTREAM_STATUS_URL=
 PURSTREAM_API_BASE=
+
+# --- Supabase (optionnel) --------------------------------------------------
+# Copie des comptes, profils et historiques dans Supabase (restauree toute
+# seule sur un serveur reinstalle), et domaines des sources modifiables depuis
+# le tableau de bord Supabase (table source_domains) : le .env ci-dessus garde
+# la priorite. Vides = tout reste local, comme avant.
+#
+# URL : Project Settings > Data API. Cle : Project Settings > API Keys >
+# « Secret keys » (sb_secret_…) — JAMAIS la cle publishable.
+# SUPABASE_MIRROR=off coupe le miroir et garde les domaines.
+SUPABASE_URL=${SUPABASE_URL:-}
+SUPABASE_SECRET_KEY=
+SUPABASE_MIRROR=
 
 # --- Confinement des iframes d'hebergeurs ----------------------------------
 # Une iframe n'est affichee que lorsque l'extraction n'a pas produit de flux

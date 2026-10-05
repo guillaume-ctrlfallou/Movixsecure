@@ -10,12 +10,17 @@ if (cluster.isPrimary ?? cluster.isMaster) {
   console.log(`🚀 Master process ${process.pid} démarré en mode cluster`);
   console.log(`📊 Création de ${NUM_WORKERS} workers...`);
 
-  for (let i = 0; i < NUM_WORKERS; i++) {
-    const worker = cluster.fork();
-    console.log(
-      `✓ Worker ${worker.process.pid} créé (${i + 1}/${NUM_WORKERS})`,
-    );
-  }
+  // Les workers sont lancés en fin de bloc, une fois Supabase consulté (voir
+  // plus bas) : ils héritent alors des domaines des sources et trouvent les
+  // comptes déjà restaurés sur le disque.
+  const forkInitialWorkers = () => {
+    for (let i = 0; i < NUM_WORKERS; i++) {
+      const worker = cluster.fork();
+      console.log(
+        `✓ Worker ${worker.process.pid} créé (${i + 1}/${NUM_WORKERS})`,
+      );
+    }
+  };
   // Anti-fork-bomb : limiter les redémarrages rapides
   const workerRestarts = new Map(); // pid -> [timestamps]
   const MAX_RESTARTS = 5;
@@ -143,6 +148,47 @@ if (cluster.isPrimary ?? cluster.isMaster) {
     recycleTimer.unref();
   } else {
     console.log('🔁 Worker recycle disabled (WORKER_RECYCLE_INTERVAL_MS=0)');
+  }
+
+  // === SUPABASE (optionnel) =================================================
+  // Domaines des sources lus dans la table source_domains, et miroir de
+  // data/users/ (comptes, historique). Module léger : fs + fetch, rien
+  // d'autre. Sans SUPABASE_URL / SUPABASE_SECRET_KEY, il renvoie null et le
+  // démarrage est identique à avant. Voir utils/supabaseMaster.js.
+  const { createSupabaseMaster } = require('./utils/supabaseMaster');
+  const supabase = createSupabaseMaster();
+
+  // Un domaine modifié dans Supabase : les workers sont relancés un par un,
+  // 15 s d'écart (sous la limite anti-fork-bomb de 5 redémarrages par minute),
+  // et les nouveaux héritent du nouvel environnement.
+  const SOURCES_RESTART_STAGGER_MS = 15 * 1000;
+  const restartWorkersForNewSources = () => {
+    const workers = Object.values(cluster.workers || {});
+    console.log(`🔁 Domaines des sources modifiés — relance de ${workers.length} worker(s)`);
+    workers.forEach((worker, idx) => {
+      setTimeout(() => {
+        if (isShuttingDown || worker.isDead()) return;
+        worker.send('shutdown');
+        setTimeout(() => {
+          try {
+            if (!worker.isDead()) worker.kill('SIGKILL');
+          } catch (_) { /* ignore */ }
+        }, 35000);
+      }, idx * SOURCES_RESTART_STAGGER_MS);
+    });
+  };
+
+  if (supabase) {
+    supabase
+      .boot()
+      .catch((error) => console.error(`[supabase] démarrage : ${error.message}`))
+      .finally(() => {
+        if (isShuttingDown) return;
+        forkInitialWorkers();
+        supabase.start({ onSourcesChanged: restartWorkersForNewSources });
+      });
+  } else {
+    forkInitialWorkers();
   }
 
   // Le master ne fait RIEN d'autre — pas de require express, mysql, redis, etc.

@@ -171,6 +171,14 @@ services:
       # Valeurs par defaut et validation : API/Mainapi/config/sources.js.
       # Les domaines effectifs s'affichent au demarrage (ligne « [sources] »).
 
+      # --- Supabase (optionnel) ---
+      # Miroir des comptes et de l'historique, domaines des sources
+      # modifiables depuis le tableau de bord. Cle SECRETE, jamais la publique.
+      # Voir DEPLOIEMENT.md § 7 ter et API/Mainapi/utils/supabaseMaster.js.
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_MIRROR: ${SUPABASE_MIRROR:-}
+
       # --- Live TV ---
       # Vavoo : seule source TV qui marche sans rien (ni cle, ni VIP, ni
       # extension). Son domaine tourne comme les autres.
