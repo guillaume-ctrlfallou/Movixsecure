@@ -318,7 +318,7 @@ const ANIME_SAMA_URL = `${sourceUrl("animeSama")}/`;
 console.log(
   "[sources] " +
     describeSources()
-      .map((s) => `${s.id}=${new URL(s.url).host}${s.overridden ? " (.env)" : ""}`)
+      .map((s) => `${s.id}=${new URL(s.url).host}${s.origin ? ` (${s.origin === "env" ? ".env" : s.origin})` : ""}`)
       .join(" | "),
 );
 

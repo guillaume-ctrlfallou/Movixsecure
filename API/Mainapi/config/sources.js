@@ -23,6 +23,21 @@
  *
  * Une variable presente mais vide (cas de `${X:-}` dans docker-compose) est
  * traitee comme absente : la valeur par defaut s'applique.
+ *
+ * ## Supabase (optionnel)
+ *
+ * Avec SUPABASE_URL et SUPABASE_SECRET_KEY, la table `source_domains` du
+ * projet peut aussi fournir un domaine — modifiable depuis le tableau de bord
+ * Supabase, donc depuis un telephone. Ordre de priorite :
+ *
+ *   1. la variable du `.env` si elle est renseignee ;
+ *   2. sinon l'URL de `source_domains` ;
+ *   3. sinon la valeur par defaut ci-dessous.
+ *
+ * C'est le processus maitre (server.js) qui lit la table et place les valeurs
+ * dans l'environnement des workers : le reste du code ne voit que des
+ * variables d'environnement, comme avant. MOVIX_SOURCES_SUPABASE liste les
+ * sources ainsi fournies, pour le journal de demarrage.
  */
 
 const SOURCES = Object.freeze({
@@ -75,13 +90,52 @@ function sourceHost(id) {
   return new URL(sourceUrl(id)).host;
 }
 
-/** Tableau recapitulatif, journalise au demarrage. */
+/**
+ * Tableau recapitulatif, journalise au demarrage. `origin` vaut 'env',
+ * 'supabase', ou null pour la valeur par defaut.
+ */
 function describeSources() {
+  const fromSupabase = new Set(String(process.env.MOVIX_SOURCES_SUPABASE || '').split(',').filter(Boolean));
   return Object.keys(SOURCES).map((id) => {
     const def = SOURCES[id];
     const overridden = Boolean(normalize(id, process.env[def.env], def.path));
-    return { id, env: def.env, url: sourceUrl(id), overridden };
+    const origin = !overridden ? null : fromSupabase.has(id) ? 'supabase' : 'env';
+    return { id, env: def.env, url: sourceUrl(id), overridden, origin };
   });
 }
 
-module.exports = { SOURCES, sourceUrl, sourceHost, describeSources };
+/**
+ * Calcule l'environnement a donner aux workers a partir des lignes de
+ * `source_domains` ({ id, url }). Fonction pure : n'ecrit rien.
+ *
+ * `bootEnv` est l'environnement d'origine du maitre : une variable qui y est
+ * renseignee garde la priorite, Supabase ne la remplace jamais. Une URL
+ * invalide est ecartee (avec avertissement), la source garde son defaut.
+ *
+ * Renvoie { env, fromSupabase } : `env` associe chaque variable concernee a
+ * sa valeur (ou a undefined pour revenir a l'etat d'origine).
+ */
+function resolveRemoteSources(rows, bootEnv) {
+  const byId = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (row && typeof row.id === 'string' && Object.hasOwn(SOURCES, row.id)) byId.set(row.id, row.url);
+  }
+
+  const env = {};
+  const fromSupabase = [];
+  for (const [id, def] of Object.entries(SOURCES)) {
+    const local = String(bootEnv[def.env] ?? '').trim();
+    if (local) continue; // le .env garde la main
+    const remote = normalize(id, byId.get(id), def.path);
+    if (remote) {
+      env[def.env] = remote;
+      fromSupabase.push(id);
+    } else {
+      env[def.env] = bootEnv[def.env]; // undefined ou vide : defaut du code
+    }
+  }
+  env.MOVIX_SOURCES_SUPABASE = fromSupabase.join(',');
+  return { env, fromSupabase };
+}
+
+module.exports = { SOURCES, sourceUrl, sourceHost, describeSources, resolveRemoteSources };

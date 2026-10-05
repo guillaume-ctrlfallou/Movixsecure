@@ -418,6 +418,9 @@ docker compose up -d mainapi     # pas de rebuild nécessaire
 Le frontend n'est **pas** concerné : ces variables sont lues côté serveur à
 chaud. Seules les `PUBLIC_*` imposent un rebuild.
 
+Sans accès au serveur (depuis un téléphone) : la table `source_domains` de
+Supabase fait la même chose, appliquée en 10 minutes au plus — voir § 7 ter.
+
 Deux autres causes, plus rares :
 
 - **Un hébergeur change de domaine** → `src/utils/hosterRegistry.ts`. Voe en
@@ -556,9 +559,9 @@ Une archive datée `movix-AAAA-MM-JJ_HHMMSS.tar.gz` arrive dans
 | Élément | Pourquoi |
 |---|---|
 | `.env` | **Critique.** MySQL fixe ses mots de passe à la création du volume : sans ce fichier, la base existante devient inaccessible |
-| Base MySQL | comptes, profils, clés VIP, commentaires |
-| Volume `mainapi-data` | historique, progression, favoris synchronisés |
-| Supabase | uniquement si `SUPABASE_DB_URL` est renseignée — l'offre gratuite n'a **aucune** sauvegarde |
+| Base MySQL | clés VIP, sessions, liaisons Discord/Google des comptes, commentaires |
+| Volume `mainapi-data` | comptes, profils, historique, progression, favoris (`data/users/`) |
+| Supabase | uniquement si `SUPABASE_DB_URL` est renseignée. Facultatif avec le miroir du § 7 ter : Supabase y est une **copie** de `mainapi-data`, déjà dans l'archive |
 | `MANIFEST.txt` | date, commit, empreinte SHA-256 de chaque fichier |
 
 Ne sont pas sauvegardés, volontairement : le cache (il se régénère), Redis
@@ -603,6 +606,110 @@ docker compose build && docker compose up -d mysql
 ./deploy/restore.sh /chemin/movix-….tar.gz               # base + données
 docker compose up -d
 ```
+
+---
+
+## 7 ter. Supabase : comptes et historique hors du serveur
+
+### Ce que ça apporte
+
+- **Une copie des comptes, profils et historiques hors du serveur.** Toutes les
+  deux minutes, les fichiers modifiés de `data/users/` sont recopiés dans
+  Supabase. Le disque reste la référence ; Supabase est la copie.
+- **Restauration automatique.** Un serveur réinstallé avec les mêmes clés
+  Supabase retrouve tout seul ses comptes et ses historiques au démarrage,
+  avant même d'accepter une connexion — sans archive.
+- **Les domaines des sources depuis ton téléphone.** La table `source_domains`
+  se modifie dans le tableau de bord Supabase. Le serveur la relit toutes les
+  10 minutes et relance ses workers un par un : aucune commande à taper.
+
+### Le projet
+
+Projet **`movix-perso`**, région Paris (`eu-west-3`), offre gratuite, créé le
+5 octobre 2026. Les tables sont déjà en place
+(`supabase/migrations/20261005000000_movix_miroir.sql`) :
+
+| Table | Contenu | Accès |
+|---|---|---|
+| `user_files` | un fichier de `data/users/` par ligne ; les fichiers supprimés restent comme « pierres tombales » | serveur seulement |
+| `source_domains` | une ligne par source ; `url` vide = défaut du code | serveur seulement |
+
+« Serveur seulement » : RLS activée sans aucune règle, et droits retirés aux
+rôles publics. La clé *publishable* du projet ne lit **rien** (vérifié dans la
+base). Seule la clé secrète, côté serveur, y accède.
+
+### L'activer — 3 minutes
+
+1. Tableau de bord Supabase → projet `movix-perso` → **Project Settings → API
+   Keys** → onglet *Publishable and secret API keys* → **Secret keys** →
+   copier la clé `sb_secret_…` (en créer une si la liste est vide).
+   **Jamais la clé publishable**, et jamais l'ancienne clé `service_role`
+   (abandonnée fin 2026).
+2. Dans le `.env` du serveur (`./deploy/setup.sh` ajoute les lignes vides) :
+
+   ```bash
+   SUPABASE_URL=https://<ref-du-projet>.supabase.co   # Project Settings > Data API
+   SUPABASE_SECRET_KEY=sb_secret_…
+   ```
+
+3. Appliquer et vérifier :
+
+   ```bash
+   docker compose up -d --force-recreate mainapi
+   docker compose logs mainapi | grep '\[supabase\]'
+   # [supabase] active (….supabase.co) — miroir actif
+   # [supabase] miroir pret : 12 fichier(s) sur le disque, 0 dans Supabase, 0 restaure(s), 12 envoye(s)
+   ```
+
+La clé secrète donne un accès complet au projet : elle ne vit que dans le
+`.env` (droits 600). La garde de sécurité (§ 6 bis) bloque un commit qui en
+contiendrait une.
+
+### Changer le domaine d'une source
+
+Table Editor → `source_domains` → colonne `url` de la source →
+`https://nouveau-domaine.tld`. Au plus 10 minutes plus tard :
+
+```bash
+docker compose logs mainapi | grep -E '\[supabase\]|\[sources\]'
+# [supabase] domaines des sources : fstream fourni(s) par Supabase
+# [sources] … | fstream=nouveau-domaine.tld (supabase) | …
+```
+
+Priorité : la variable du `.env` si elle est renseignée, sinon Supabase, sinon
+le défaut du code. Vider la cellule remet le défaut. Une URL invalide est
+ignorée (avertissement dans les journaux).
+
+### Ce qu'il faut savoir
+
+- **Mise en pause.** Supabase met en pause un projet gratuit après 7 jours
+  sans activité. Le serveur l'interroge toutes les 10 minutes, ce qui le garde
+  éveillé. Si le serveur est éteint plus d'une semaine : tableau de bord →
+  *Restore project*. Pendant la pause, le site marche normalement en local ;
+  le miroir rattrape son retard au réveil.
+- **Serveur neuf pendant que Supabase dort.** C'est le seul cas délicat : une
+  connexion recréerait un compte vide, plus récent que la copie complète.
+  Le miroir ne l'envoie pas. Au réveil de Supabase, la copie complète est
+  restaurée, et la version vide est mise de côté dans `data/users-conflits/`.
+  Testé.
+- **Un seul serveur par projet.** Le miroir n'est pas conçu pour que deux
+  instances écrivent les mêmes comptes.
+- **Ce qui n'est pas dans Supabase.** Le miroir couvre `data/users/`. Un compte
+  à 12 mots s'y retrouve en entier : c'est la phrase qui donne l'identifiant.
+  Un compte Discord ou Google dépend en plus de sa liaison, stockée dans MySQL
+  (`account_links`) : pour lui, l'archive de `backup.sh` reste nécessaire. Même
+  chose pour les clés VIP saisies à la main (la clé auto-hébergée se recrée
+  seule).
+- **Avec `restore.sh`.** Après la restauration d'une archive, les fichiers que
+  Supabase a en version plus récente sont remplacés par celle-ci au
+  démarrage. C'est le comportement voulu après une panne. Pour revenir
+  volontairement en arrière : `SUPABASE_MIRROR=off` dans le `.env`, puis
+  restaurer.
+- **Couper.** `SUPABASE_MIRROR=off` arrête le miroir et garde les domaines ;
+  vider `SUPABASE_URL` désactive tout.
+- **Ce que Supabase ne fait pas (encore).** Les comptes restent ceux de
+  Movix : Supabase Auth n'est pas utilisé. C'est l'étape suivante si une app
+  installée doit un jour lire l'historique directement, sans serveur.
 
 ---
 
@@ -738,6 +845,24 @@ sed -i 's/^# API$/API/' .dockerignore
   MySQL arrêté, rotation, restauration sans confirmation, `--with-env` sur un
   `.env` existant, installation et retrait du cron sans toucher aux autres
   tâches.
+- **Garde de sécurité** : un commit piégé déclenche chaque règle ; un mois réel
+  d'historique de l'amont donne un rapport exploitable en 3 s ; ce dépôt ne
+  produit aucun point critique. Les étapes de la synchro, extraites du YAML,
+  ont tourné contre un faux amont (nouveaux commits, rejeu, branche modifiée à
+  la main, amont fusionné, injoignable, coupé).
+- **Supabase — base** : la migration est appliquée au projet `movix-perso` ;
+  les écritures conditionnelles (plus ancienne refusée, pierre tombale) et
+  l'absence de droits des rôles publics sont vérifiées dans la base.
+- **Supabase — serveur** : le miroir contre un faux PostgREST reproduisant les
+  fonctions SQL (première activation, modification, suppression, disque vide
+  restauré, archive ancienne, serveur neuf pendant une pause, panne,
+  pagination au-delà de 1 000 lignes, chemin distant hostile, mauvaise clé) ;
+  puis le vrai processus maître de `server.js` : comptes restaurés avant le
+  premier worker, domaine Supabase transmis, `.env` prioritaire, workers
+  relancés après un changement de domaine, démarrage malgré une panne ou une
+  clé publique collée par erreur. Non testé depuis cet environnement : un
+  appel réseau réel vers `supabase.co` (sortie bloquée ici) — le premier
+  démarrage chez toi le fait, la ligne « miroir pret » le confirme.
 
 Limite connue : les extracteurs d'hébergeurs dépendent de sites tiers qui
 changent sans prévenir. Aucune instance — publique comprise — n'a 100 % de
