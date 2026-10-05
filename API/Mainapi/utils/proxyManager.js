@@ -87,9 +87,7 @@ const ENABLE_COFLIX_PROXY = true; // Passe \u00e0 false pour d\u00e9sactiver le 
 // Origine Coflix utilis\u00e9e comme Referer/Origin des requ\u00eates LecteurVideo
 // (le token JWT du player est \u00e9mis par Coflix ; lecteurvideo.com valide le Referer).
 // Overridable via COFLIX_BASE_URL pour suivre les rotations de domaine.
-const COFLIX_ORIGIN = (
-  process.env.COFLIX_BASE_URL || "https://coflix.esq"
-).replace(/\/$/, "");
+const COFLIX_ORIGIN = require("../config/sources").sourceUrl("coflix");
 const ENABLE_FRENCH_STREAM_PROXY = true; // Active/d\u00e9sactive le proxy pour French-Stream
 const ENABLE_LECTEURVIDEO_PROXY = true; // Active/d\u00e9sactive le proxy pour LecteurVideo
 const ENABLE_FSTREAM_PROXY = true; // Active/d\u00e9sactive le proxy pour FStream
@@ -977,7 +975,7 @@ async function makeCinestreamRequest(targetUrl, options = {}) {
   const cycleHeaders = {
     Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
-    Referer: "https://cinestream.info/",
+    Referer: `${require("../config/sources").sourceUrl("cinestream")}/`,
     ...headers,
   };
 

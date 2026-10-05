@@ -7,7 +7,9 @@
 const cheerio = require('cheerio');
 const axios = require('axios');
 
-const FRENCHSTREAM_BASE_URL = 'https://frenchstream.food';
+const { sourceUrl, sourceHost } = require('../config/sources');
+const FRENCHSTREAM_BASE_URL = sourceUrl('frenchstream');
+const FRENCHSTREAM_HOST = sourceHost('frenchstream');
 
 // ---------------------------------------------------------------------------
 // Dependencies injected via configure()
@@ -179,11 +181,14 @@ async function getFrenchStreamSeries(id) {
 async function getFrenchStreamSeriesDetails(seriesUrl, originalTitle) {
   try {
     // Convertir les anciens domaines FrenchStream vers le domaine actif.
+    // Les anciens domaines sont redirigés vers le domaine configuré (et non
+    // plus vers un `frenchstream.food` figé).
     const targetUrl = seriesUrl
-      .replace('fr.french-stream.sbs', 'frenchstream.food')
-      .replace('french-stream.gratis', 'frenchstream.food')
-      .replace('french-stream.legal', 'frenchstream.food')
-      .replace('french-stream.one', 'frenchstream.food');
+      .replace('fr.french-stream.sbs', FRENCHSTREAM_HOST)
+      .replace('french-stream.gratis', FRENCHSTREAM_HOST)
+      .replace('french-stream.legal', FRENCHSTREAM_HOST)
+      .replace('french-stream.one', FRENCHSTREAM_HOST)
+      .replace('frenchstream.food', FRENCHSTREAM_HOST);
 
     const response = await makeRequestWithCorsFallback(targetUrl, {
       timeout: 5000,

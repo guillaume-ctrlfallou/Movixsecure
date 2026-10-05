@@ -18,8 +18,9 @@ const { buildSignedProxyUrl, signingConfigured } = require('../utils/mediaSignin
 
 // Repli statique si `/api/status` est injoignable. `api.purstream.cc` est mort
 // (404) : le repli ne servait plus qu'à masquer la panne.
-const PURSTREAM_BASE = 'https://api.purstream.id/api/v1';
-const PURSTREAM_STATUS_URL = 'https://purstream.wiki/api/status';
+const { sourceUrl } = require('../config/sources');
+const PURSTREAM_BASE = sourceUrl('purstreamApi');
+const PURSTREAM_STATUS_URL = sourceUrl('purstreamStatus');
 const PURSTREAM_CACHE_DIR = CACHE_DIR.PURSTREAM;
 const PURSTREAM_STATUS_TTL_MS = 5 * 60 * 1000;
 

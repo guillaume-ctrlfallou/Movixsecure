@@ -50,8 +50,8 @@ const axios = require("axios");
 const { wrapper } = require("axios-cookiejar-support");
 const tough = require("tough-cookie");
 const axiosHelpers = require("./utils/axiosHelpers");
+const { sourceUrl, describeSources } = require("./config/sources");
 
-const DEFAULT_DARKIWORLD_BASE_URL = "https://darkiworld2026.com";
 
 function normalizeBaseUrl(value) {
   return String(value || "")
@@ -59,9 +59,7 @@ function normalizeBaseUrl(value) {
     .replace(/\/+$/, "");
 }
 
-const DARKIWORLD_BASE_URL = normalizeBaseUrl(
-  process.env.DARKIWORLD_BASE_URL || DEFAULT_DARKIWORLD_BASE_URL,
-);
+const DARKIWORLD_BASE_URL = normalizeBaseUrl(sourceUrl("darkiworld"));
 
 const cookieJar = new tough.CookieJar();
 
@@ -105,11 +103,12 @@ const darkiHeaders = {
 };
 
 // Coflix config
-const COFLIX_BASE_URL = "https://coflix.date";
+// Domaine configurable : voir config/sources.js (COFLIX_BASE_URL).
+const COFLIX_BASE_URL = sourceUrl("coflix");
 const coflixHeaders = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-  Referer: "https://coflix.date",
+  Referer: COFLIX_BASE_URL,
 };
 
 // === Axios instances for each source ===
@@ -129,7 +128,7 @@ const axiosAnimeSama = axios.create({
   decompress: true,
 });
 
-const FSTREAM_BASE_URL_VAL = "https://french-stream.one/";
+const FSTREAM_BASE_URL_VAL = `${sourceUrl("fstream")}/`;
 const axiosFStream = axios.create({
   baseURL: FSTREAM_BASE_URL_VAL,
   timeout: 6000,
@@ -153,7 +152,7 @@ const axiosFStream = axios.create({
     "sec-ch-ua": '"Not(A:Brand";v="8", "Chromium";v="144", "Brave";v="144"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',
-    Referer: "https://french-stream.one/",
+    Referer: FSTREAM_BASE_URL_VAL,
   },
   decompress: true,
 });
@@ -210,7 +209,7 @@ axiosHelpers.configure({
   axiosCoflix,
   axiosAnimeSama,
   axiosFStream,
-  ANIME_SAMA_URL: "https://anime-sama.to/",
+  ANIME_SAMA_URL: `${sourceUrl("animeSama")}/`,
   FSTREAM_BASE_URL: FSTREAM_BASE_URL_VAL,
 });
 
@@ -313,7 +312,15 @@ const DOWNLOAD_CACHE_DIR = require("path").join(
   "cache",
   "darkinodownloadlink",
 );
-const ANIME_SAMA_URL = "https://anime-sama.to/";
+const ANIME_SAMA_URL = `${sourceUrl("animeSama")}/`;
+
+// Domaines effectivement utilises, visibles dans `docker compose logs mainapi`.
+console.log(
+  "[sources] " +
+    describeSources()
+      .map((s) => `${s.id}=${new URL(s.url).host}${s.overridden ? " (.env)" : ""}`)
+      .join(" | "),
+);
 
 // Shared deps object for common dependencies
 const commonDeps = {

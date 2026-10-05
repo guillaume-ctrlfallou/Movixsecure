@@ -22,9 +22,7 @@ let deps = {
     throw new Error("coflix not configured");
   },
   coflixHeaders: {},
-  COFLIX_BASE_URL: (
-    process.env.COFLIX_BASE_URL || "https://coflix.boston"
-  ).replace(/\/$/, ""),
+  COFLIX_BASE_URL: require("../config/sources").sourceUrl("coflix"),
   getFromCacheNoExpiration: async () => null,
   saveToCache: async () => false,
   formatCoflixError: (error) =>
@@ -686,7 +684,7 @@ async function getTvDataFromCoflix(url, seasonNumber, episodeNumber) {
       return { seasons: [], current_episode: null };
     }
 
-    const base = (deps.COFLIX_BASE_URL || "https://coflix.boston").replace(
+    const base = (deps.COFLIX_BASE_URL || require("../config/sources").sourceUrl("coflix")).replace(
       /\/$/,
       "",
     );

@@ -77,9 +77,7 @@ const summarizeRequestErrorForLog = (error) => {
   };
 };
 
-const DARKIWORLD_BASE_URL = String(process.env.DARKIWORLD_BASE_URL || 'https://darkiworld2026.com')
-  .trim()
-  .replace(/\/+$/, '');
+const DARKIWORLD_BASE_URL = require('../config/sources').sourceUrl('darkiworld');
 
 /**
  * Inject site-specific dependencies that live outside this module.
@@ -703,8 +701,10 @@ async function axiosAnimeSamaRequest(config) {
   const debugAnimeSama = process.env.DEBUG_ANIMESAMA === 'true';
   let urlStr = config.url || '';
 
-  const isAnimeSama = urlStr.includes('anime-sama.to') || urlStr.includes('anime-sama.si') || urlStr.includes('anime-sama.fr') ||
-    (config.baseURL && (config.baseURL.includes('anime-sama.to') || config.baseURL.includes('anime-sama.si') || config.baseURL.includes('anime-sama.fr')));
+  // Domaines historiques + domaine configure (ANIME_SAMA_BASE_URL) : sans ce
+  // dernier, un demenagement d'Anime-Sama passait inapercu ici.
+  const animeSamaHosts = ['anime-sama.to', 'anime-sama.si', 'anime-sama.fr', require('../config/sources').sourceHost('animeSama')];
+  const isAnimeSama = animeSamaHosts.some((h) => urlStr.includes(h) || (config.baseURL && config.baseURL.includes(h)));
 
   if (!ENABLE_ANIME_PROXY || !isAnimeSama) {
     return deps.axiosAnimeSama({ ...config, timeout: 30000, proxy: false });

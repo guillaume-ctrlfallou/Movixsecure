@@ -29,7 +29,7 @@ const TMDB_API_KEY = process.env.TMDB_API_KEY || "";
 const TMDB_API_URL = "https://api.themoviedb.org/3";
 // Override via env if cinestream rotates domains (no code change).
 const CINESTREAM_BASE_URL =
-  process.env.CINESTREAM_BASE_URL || "https://cinestream.info";
+  require("../config/sources").sourceUrl("cinestream");
 
 // Cap film-page confirmations per movie. Search is relevance-sorted and we bump
 // year-matches first, so the right film is almost always in the first 1-2.

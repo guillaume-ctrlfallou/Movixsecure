@@ -105,14 +105,23 @@ SELFHOST_VIP_KEY=$(secret 40)
 # --- Catalogue -------------------------------------------------------------
 TMDB_API_KEY=${TMDB_KEY}
 
-# Domaines des sources. Vides = valeurs par defaut du code. Quand une source
-# demenage, c'est ICI qu'on corrige — jamais dans le code.
+# Domaines des sources. Vides = valeurs par defaut (API/Mainapi/config/sources.js).
+# Quand une source demenage, c'est ICI qu'on corrige — jamais dans le code —
+# puis `docker compose up -d mainapi` (pas de rebuild). Les domaines effectifs
+# s'affichent au demarrage : docker compose logs mainapi | grep '\[sources\]'
 WIFLIX_BASE_URL=
 COFLIX_BASE_URL=
 CINESTREAM_BASE_URL=
 DARKIWORLD_BASE_URL=
 J1F_BASE_URL=
 SWIFTFLOW_BASE_URL=
+FSTREAM_BASE_URL=
+FRENCHSTREAM_BASE_URL=
+VOIRDRAMA_BASE_URL=
+ANIME_SAMA_BASE_URL=
+# PurStream trouve son domaine d'API tout seul via cette page de statut.
+PURSTREAM_STATUS_URL=
+PURSTREAM_API_BASE=
 
 # --- Confinement des iframes d'hebergeurs ----------------------------------
 # Une iframe n'est affichee que lorsque l'extraction n'a pas produit de flux
@@ -263,6 +272,10 @@ echo "  docker compose up -d"
 echo "  docker compose logs -f mainapi"
 echo
 echo "Puis ouvre : $(env_value PUBLIC_SITE_URL)"
+if ! crontab -l 2>/dev/null | grep -q "# movix-backup"; then
+    echo "Sauvegarde automatique non installee. Pour l'activer (chaque nuit, 14 gardees) :"
+    echo "  ./deploy/backup.sh --install-cron"
+fi
 if [[ -n "$(env_value SELFHOST_VIP_KEY)" ]]; then
     echo "Le VIP est active automatiquement dans le navigateur, rien a saisir."
 fi
