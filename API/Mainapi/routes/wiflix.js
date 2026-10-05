@@ -42,7 +42,7 @@ const { fetchCinestreamMovieData } = require("./cinestream");
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "";
 const TMDB_API_URL = "https://api.themoviedb.org/3";
 // Source rotates domains (flemmix.fast -> ...). Override via env, no code change.
-const WIFLIX_BASE_URL = process.env.WIFLIX_BASE_URL || "https://flemmix.fast";
+const WIFLIX_BASE_URL = require("../config/sources").sourceUrl("wiflix");
 
 // === Cache helpers (local, since getFromCacheNoExpiration is not yet in cacheManager) ===
 const getFromCacheNoExpiration = async (cacheDir, key) => {

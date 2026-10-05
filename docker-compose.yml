@@ -162,6 +162,14 @@ services:
       DARKIWORLD_BASE_URL: ${DARKIWORLD_BASE_URL:-}
       J1F_BASE_URL: ${J1F_BASE_URL:-}
       SWIFTFLOW_BASE_URL: ${SWIFTFLOW_BASE_URL:-}
+      FSTREAM_BASE_URL: ${FSTREAM_BASE_URL:-}
+      FRENCHSTREAM_BASE_URL: ${FRENCHSTREAM_BASE_URL:-}
+      VOIRDRAMA_BASE_URL: ${VOIRDRAMA_BASE_URL:-}
+      ANIME_SAMA_BASE_URL: ${ANIME_SAMA_BASE_URL:-}
+      PURSTREAM_STATUS_URL: ${PURSTREAM_STATUS_URL:-}
+      PURSTREAM_API_BASE: ${PURSTREAM_API_BASE:-}
+      # Valeurs par defaut et validation : API/Mainapi/config/sources.js.
+      # Les domaines effectifs s'affichent au demarrage (ligne « [sources] »).
 
       # --- Live TV ---
       # Vavoo : seule source TV qui marche sans rien (ni cle, ni VIP, ni

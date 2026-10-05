@@ -23,7 +23,7 @@ const respondWithSources = (req, res, payload) =>
 const { fetchTmdbDetails } = require('../utils/tmdbCache');
 
 // === VOIRDRAMA CONFIGURATION ===
-const VOIRDRAMA_BASE_URL = 'https://voirdrama.to';
+const VOIRDRAMA_BASE_URL = require('../config/sources').sourceUrl('voirdrama');
 
 // Impit — remplacement de got-scraping (Rust TLS fingerprint + HTTP/2 natif, pas de http2-wrapper)
 let impitClient = null;

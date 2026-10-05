@@ -41,7 +41,7 @@ const { PROXIES, DARKINO_PROXIES, getProxyAgent, getDarkinoHttpProxyAgent } = re
 // === FStream Configuration ===
 const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
 const TMDB_API_URL = 'https://api.themoviedb.org/3';
-const FSTREAM_BASE_URL = 'https://french-stream.one';
+const FSTREAM_BASE_URL = require('../config/sources').sourceUrl('fstream');
 const FSTREAM_SEARCH_URL = `${FSTREAM_BASE_URL}/engine/ajax/search.php`;
 
 // === FStream Authentication (disabled) ===
