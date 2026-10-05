@@ -365,20 +365,53 @@ apparaît dès que TMDB le référence. Aucune tâche planifiée chez toi.
 Ce qui casse, c'est la **résolution des liens**, et presque toujours pour la
 même raison : un site source a déménagé.
 
-C'est pour ça que chaque source lit son domaine dans le `.env` :
+### D'où viennent les lecteurs
 
-```bash
-WIFLIX_BASE_URL=https://nouveau-domaine.example
-COFLIX_BASE_URL=
-CINESTREAM_BASE_URL=
-DARKIWORLD_BASE_URL=
-J1F_BASE_URL=
-SWIFTFLOW_BASE_URL=
+Un film affiché n'est pas forcément lisible. Derrière chaque lecteur, une
+chaîne en trois étages, chacun pouvant casser seul :
+
+```
+1. Catalogue     TMDB                       → jamais de maintenance
+2. Sites sources cherchent le film, renvoient des liens d'hébergeurs
+3. Hébergeurs    stockent la vidéo ; l'extracteur en tire le flux direct
+   → lecture directe si l'extraction réussit, sinon iframe (repli)
 ```
 
-Vide = la valeur par défaut du code. Après modification :
+L'étage 2 casse le plus souvent : le site déménage et ses films perdent leurs
+lecteurs. **Tous** les domaines se règlent donc dans le `.env`, sans toucher
+au code :
+
+| Variable | Source | Défaut |
+|---|---|---|
+| `WIFLIX_BASE_URL` | Wiflix (séries) | flemmix.fast |
+| `COFLIX_BASE_URL` | Coflix | coflix.date |
+| `CINESTREAM_BASE_URL` | Cinestream (films) | cinestream.info |
+| `DARKIWORLD_BASE_URL` | Darkiworld | darkiworld2026.com |
+| `FSTREAM_BASE_URL` | FStream | french-stream.one |
+| `FRENCHSTREAM_BASE_URL` | FrenchStream | frenchstream.food |
+| `VOIRDRAMA_BASE_URL` | VoirDrama | voirdrama.to |
+| `ANIME_SAMA_BASE_URL` | Anime-Sama | anime-sama.to |
+| `PURSTREAM_STATUS_URL` | PurStream — trouve son domaine **tout seul** | purstream.wiki/api/status |
+| `PURSTREAM_API_BASE` | PurStream — repli si la page de statut tombe | api.purstream.id/api/v1 |
+| `J1F_GO_URL` / `J1F_BASE_URL` | 1jour1film — **suit tout seul** le domaine | page `/go/` |
+| `SWIFTFLOW_BASE_URL` | SwiftFlow | — |
+
+Les valeurs par défaut et leur validation sont dans un seul fichier,
+`API/Mainapi/config/sources.js`. Une valeur vide reprend le défaut ; une valeur
+invalide aussi, avec un avertissement dans les journaux plutôt qu'un plantage.
+
+Les domaines **effectivement utilisés** s'affichent au démarrage :
 
 ```bash
+docker compose logs mainapi | grep '\[sources\]'
+# [sources] wiflix=flemmix.fast | coflix=coflix.date | fstream=nouveau.tld (.env) | …
+```
+
+`(.env)` signale une valeur surchargée. Pour corriger une source qui a
+déménagé :
+
+```bash
+echo 'FSTREAM_BASE_URL=https://nouveau-domaine.tld' >> .env
 docker compose up -d mainapi     # pas de rebuild nécessaire
 ```
 
@@ -405,15 +438,7 @@ docker compose down                    # arrêt (les volumes survivent)
 docker compose down -v                 # ⚠️ arrêt + SUPPRESSION des données
 ```
 
-**Sauvegarde** — comptes, profils, historique :
-
-```bash
-docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqldump -u root movix' \
-  > sauvegarde-$(date +%F).sql
-```
-
-(le mot de passe est lu dans l'environnement du conteneur : rien à taper, et
-il n'apparaît ni dans ton historique ni dans la ligne de commande)
+**Sauvegarde** — voir § 7 bis.
 
 **Mise à jour** :
 
@@ -433,6 +458,70 @@ protégées, `API/proxiesembed/drmproxy/` (70 extracteurs DRM Widevine) ne te se
 à rien. Le supprimer allège l'image et retire la plus grosse surface de code du
 projet. Voir aussi le § 8 de l'audit sur le point juridique, qui est d'une autre
 nature que le reste.
+
+---
+
+## 7 bis. Sauvegarde et restauration
+
+```bash
+./deploy/backup.sh                  # sauvegarde maintenant
+./deploy/backup.sh --install-cron   # automatique, chaque nuit à 03:30
+```
+
+Une archive datée `movix-AAAA-MM-JJ_HHMMSS.tar.gz` arrive dans
+`~/movix-backups/` (réglable par `BACKUP_DIR`). Les 14 dernières sont gardées
+(`BACKUP_KEEP`). Elle contient :
+
+| Élément | Pourquoi |
+|---|---|
+| `.env` | **Critique.** MySQL fixe ses mots de passe à la création du volume : sans ce fichier, la base existante devient inaccessible |
+| Base MySQL | comptes, profils, clés VIP, commentaires |
+| Volume `mainapi-data` | historique, progression, favoris synchronisés |
+| Supabase | uniquement si `SUPABASE_DB_URL` est renseignée — l'offre gratuite n'a **aucune** sauvegarde |
+| `MANIFEST.txt` | date, commit, empreinte SHA-256 de chaque fichier |
+
+Ne sont pas sauvegardés, volontairement : le cache (il se régénère), Redis
+(cache et limites de débit), le code (sur GitHub).
+
+Garde-fous :
+
+- un export MySQL tronqué (disque plein, conteneur arrêté en cours de route)
+  est **refusé** plutôt que conservé comme une sauvegarde inutilisable ;
+- l'archive est écrite sous un nom temporaire puis renommée : jamais d'archive à
+  moitié écrite ;
+- la rotation n'a lieu **qu'après** un succès : un échec ne fait jamais
+  disparaître une ancienne sauvegarde ;
+- le volume de données est lu même si `mainapi` est en panne — c'est
+  précisément là qu'on a besoin d'une sauvegarde ;
+- dossier en 700, archives en 600 : elles contiennent tes secrets. Pour une copie
+  hors de la machine, chiffre-la d'abord : `gpg -c movix-….tar.gz`.
+
+Suivi de la sauvegarde automatique : `~/movix-backups/backup.log`.
+
+### Restaurer
+
+```bash
+./deploy/restore.sh ~/movix-backups/movix-….tar.gz --check   # vérifie, ne touche à rien
+./deploy/restore.sh ~/movix-backups/movix-….tar.gz           # remplace base + données
+```
+
+L'intégrité est vérifiée (gzip et SHA-256) avant toute écriture, et une
+confirmation est demandée (`RESTAURER`).
+
+Le `.env` n'est restauré **qu'avec `--with-env`**, et seulement sur une machine
+neuve : sur une machine existante, l'écraser changerait les mots de passe
+attendus par la base en place. Le `.env` remplacé est mis de côté
+(`.env.avant-restauration.*`).
+
+**Réinstallation complète sur une nouvelle machine :**
+
+```bash
+git clone <ton-dépôt> movix && cd movix
+./deploy/restore.sh /chemin/movix-….tar.gz --with-env    # pose le .env d'origine
+docker compose build && docker compose up -d mysql
+./deploy/restore.sh /chemin/movix-….tar.gz               # base + données
+docker compose up -d
+```
 
 ---
 
@@ -559,6 +648,15 @@ sed -i 's/^# API$/API/' .dockerignore
   du frontend ; `balanced` s'applique même sans la variable.
 - `npm run build` passe ; le préréglage de sandbox est vérifié pour chaque
   valeur, faute de frappe comprise.
+- **Domaines des sources** : avec des domaines surchargés, les modules de
+  routes réels contactent bien les nouveaux hôtes (requêtes interceptées), et
+  `app.js` crée ses clients Coflix et FStream sur le domaine du `.env`.
+- **Sauvegarde / restauration** : sur une base MariaDB réelle avec le schéma
+  complet — sauvegarde, destruction de la base et des données, restauration,
+  comparaison à l'identique. Testés aussi : archive altérée, export tronqué,
+  MySQL arrêté, rotation, restauration sans confirmation, `--with-env` sur un
+  `.env` existant, installation et retrait du cron sans toucher aux autres
+  tâches.
 
 Limite connue : les extracteurs d'hébergeurs dépendent de sites tiers qui
 changent sans prévenir. Aucune instance — publique comprise — n'a 100 % de

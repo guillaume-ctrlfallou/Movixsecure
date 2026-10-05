@@ -102,3 +102,9 @@ API/Mainapi/exportscripts/
 keystore.properties
 signing.properties
 release-signing.properties
+
+# Copies du .env creees par deploy/setup.sh (.env.bak.*) et deploy/restore.sh
+# (.env.avant-restauration.*). Elles contiennent TOUS les secrets de
+# l'instance : elles ne doivent jamais partir dans le depot, qui est public.
+.env.*
+!.env.example
