@@ -107,7 +107,7 @@ TMDB_API_KEY=${TMDB_KEY}
 
 # Domaines des sources. Vides = valeurs par defaut (API/Mainapi/config/sources.js).
 # Quand une source demenage, c'est ICI qu'on corrige — jamais dans le code —
-# puis `docker compose up -d mainapi` (pas de rebuild). Les domaines effectifs
+# puis \`docker compose up -d mainapi\` (pas de rebuild). Les domaines effectifs
 # s'affichent au demarrage : docker compose logs mainapi | grep '\[sources\]'
 WIFLIX_BASE_URL=
 COFLIX_BASE_URL=
