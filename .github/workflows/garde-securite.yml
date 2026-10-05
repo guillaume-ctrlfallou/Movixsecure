@@ -1,0 +1,52 @@
+name: Garde de sécurité
+
+# Analyse statique de chaque PR : traqueurs et régies, code obfusqué, secrets,
+# scripts d'installation, dépendances hors registre, fichiers sensibles.
+# Rien du code de la PR n'est exécuté. Détail des règles :
+# .github/scripts/garde-securite.mjs
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: garde-securite-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  garde:
+    name: Analyse statique du diff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Le script vient de la branche cible, jamais de la PR : une PR ne peut
+      # pas modifier la garde qui l'analyse.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Le contenu de la PR n'est récupéré que comme objets git, pas extrait
+      # dans l'arbre de travail.
+      - name: Récupérer les commits de la PR
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
+
+      - name: Analyser
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          SCRIPT=.github/scripts/garde-securite.mjs
+          if [ ! -f "$SCRIPT" ]; then
+            # Seul cas où la version de la PR sert : la PR qui installe la garde.
+            echo "::warning::La branche cible n'a pas encore la garde : version de la PR utilisée (première installation)."
+            git show "${HEAD_SHA}:${SCRIPT}" > "$RUNNER_TEMP/garde-securite.mjs"
+            SCRIPT="$RUNNER_TEMP/garde-securite.mjs"
+          fi
+          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          node "$SCRIPT" --base "$MERGE_BASE" --head "$HEAD_SHA" --mode pr --out "$RUNNER_TEMP/rapport.md"

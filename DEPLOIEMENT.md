@@ -428,6 +428,87 @@ Deux autres causes, plus rares :
 
 ---
 
+## 6 bis. Suivi de l'amont et garde de sécurité
+
+### État de l'amont (octobre 2026)
+
+- `movixcorp/MovixOpenSource`, le dépôt d'origine, est **désactivé par GitHub
+  depuis le 22 septembre 2026** à la suite d'une notice DMCA de l'ALPA
+  (publiée sur `github/dmca`, fichier `2026/09/2026-09-22-alpa.md`). La notice
+  cite un jugement du tribunal de Paris du 19 mars 2026 qui qualifie le site de
+  « massivement contrefaisant », et demande aussi le bannissement du compte.
+- `Mathr81/MovixOpenSource`, le parent direct de ce fork, n'a plus bougé
+  depuis le 8 septembre 2026. Ce dépôt en contient déjà tous les commits.
+
+**Conséquence : il n'y a plus de source de correctifs.** Les extracteurs
+d'hébergeurs (étage 3, ~1 correctif toutes les 2-3 semaines) devront être
+maintenus ici. Le workflow ci-dessous reste en place : il ne fait rien tant que
+l'amont ne bouge pas, et il servira si un amont vivant réapparaît.
+
+### Synchro hebdomadaire — `.github/workflows/synchro-amont.yml`
+
+Chaque lundi, le workflow lit l'amont **en lecture seule**. S'il a avancé, ses
+commits sont poussés sur la branche `amont/synchro` de **ce** dépôt, et une PR
+s'ouvre avec le rapport de la garde. Rien n'est fusionné automatiquement.
+
+| Réglage (*Settings → Secrets and variables → Actions → Variables*) | Rôle |
+|---|---|
+| `UPSTREAM_REPO` | `owner/nom` de l'amont. Défaut : `Mathr81/MovixOpenSource`. `aucun` coupe la synchro. |
+| `UPSTREAM_BRANCH` | Branche suivie. Défaut : `main`. |
+
+Trois réglages GitHub à faire une fois :
+
+1. **Activer les Actions du fork** : onglet *Actions* → *I understand my
+   workflows, go ahead and enable them*. GitHub les désactive par défaut sur un
+   fork.
+2. *Settings → Actions → General → Workflow permissions* → cocher **Allow
+   GitHub Actions to create and approve pull requests**. Sans ça, le rapport
+   arrive dans une issue au lieu d'une PR.
+3. GitHub suspend les tâches planifiées d'un dépôt public après 60 jours sans
+   activité. Un clic sur *Enable workflow* les relance.
+
+Garde-fous :
+
+- l'URL de push de l'amont est neutralisée dans le job ; le jeton n'a de droits
+  que sur ce dépôt ;
+- le code récupéré n'est jamais extrait ni exécuté (aucun `npm install`) ;
+- la garde qui l'analyse est celle de `main`, pas celle de l'amont ;
+- jamais de `push --force` : si `amont/synchro` porte une résolution de conflit
+  ajoutée à la main, elle est laissée intacte ;
+- si l'amont modifie `.github/workflows`, le push est refusé par GitHub (le
+  jeton n'a pas ce droit) : le rapport arrive dans une issue, la synchro se
+  fait à la main.
+
+**Fusionner une PR de synchro** : lire le rapport, puis *Create a merge
+commit* — jamais *Squash* ni *Rebase*, sinon la synchro suivante repropose
+tout. En cas de conflit sur un fichier personnalisé ici, garder notre version
+en cas de doute : c'est elle qui porte les protections.
+
+### Garde de sécurité — `.github/workflows/garde-securite.yml`
+
+Tourne sur chaque PR, et en interne dans la synchro. Analyse statique du diff,
+rien n'est exécuté. Le script (`.github/scripts/garde-securite.mjs`) est pris
+sur la branche cible, pour qu'une PR ne puisse pas modifier la garde qui
+l'analyse.
+
+| Niveau | Ce qui est cherché |
+|---|---|
+| 🔴 critique (check rouge) | domaines de traqueurs et de régies ; code obfusqué (`eval(atob(…))`, `_0x…`, longues chaînes hexadécimales ou base64) ; minage ; secrets (clés AWS, GitHub, Stripe, Supabase `service_role`, webhooks Discord, clés privées, fichiers `.env`) ; scripts `postinstall`/`prepare` ajoutés ; dépendances hors registre ; liste de miroirs lue sur un service de paste ; retour du proxy ouvert ; WebAssembly modifié sans ses sources ; en synchro, toute modification de `.github/` |
+| 🟡 attention | fichiers sensibles touchés (CSP, sandbox, service worker, auth, déploiement…) ; dépendances changées ; domaines jamais vus ; `innerHTML`, `eval`, `postMessage('*')` ; attributs de sandbox affaiblis ; binaires modifiés |
+| synchro uniquement | fichiers personnalisés ici **et** modifiés par l'amont, y compris ceux supprimés ici |
+
+Les lignes de commentaire et les fichiers de test sont ignorés, sauf pour les
+secrets et le minage. Pour la lancer à la main :
+
+```bash
+node .github/scripts/garde-securite.mjs --base origin/main --head HEAD
+```
+
+La garde trie ce qu'il faut relire en premier ; elle ne remplace pas la
+relecture.
+
+---
+
 ## 7. Exploitation
 
 ```bash

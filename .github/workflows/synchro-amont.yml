@@ -1,0 +1,221 @@
+name: Synchro amont
+
+# Chaque semaine, regarde si le dépôt amont a avancé et, si oui, propose ses
+# commits dans une PR de CE dépôt, accompagnée du rapport de la garde de
+# sécurité. Rien n'est fusionné automatiquement, et rien n'est jamais poussé
+# vers l'amont : il n'est lu qu'en lecture seule.
+#
+# Configuration (Settings > Secrets and variables > Actions > Variables) :
+#   UPSTREAM_REPO    dépôt amont, owner/nom (défaut : Mathr81/MovixOpenSource,
+#                    le parent de ce fork). « aucun » coupe la synchro.
+#   UPSTREAM_BRANCH  branche suivie (défaut : main)
+#
+# La PR est ouverte avec le jeton du workflow : elle exige le réglage
+# Settings > Actions > General > « Allow GitHub Actions to create and approve
+# pull requests ». Sans lui, le rapport part dans une issue.
+
+on:
+  schedule:
+    - cron: '23 5 * * 1' # lundi, 5 h 23 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: synchro-amont
+  cancel-in-progress: false
+
+jobs:
+  synchro:
+    name: Proposer les nouveautés de l'amont
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # pousser la branche amont/synchro, rien d'autre
+      pull-requests: write
+      issues: write
+    env:
+      UPSTREAM_REPO: ${{ vars.UPSTREAM_REPO || 'Mathr81/MovixOpenSource' }}
+      UPSTREAM_BRANCH: ${{ vars.UPSTREAM_BRANCH || 'main' }}
+      SYNC_BRANCH: amont/synchro
+      LABEL: synchro-amont
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Vérifier la configuration
+        id: config
+        run: |
+          if [ "$UPSTREAM_REPO" = "aucun" ]; then
+            echo "Synchro désactivée (UPSTREAM_REPO=aucun)." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "actif=non" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$UPSTREAM_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::UPSTREAM_REPO invalide : « $UPSTREAM_REPO » (attendu : owner/nom)"
+            exit 1
+          fi
+          if [[ ! "$UPSTREAM_BRANCH" =~ ^[A-Za-z0-9_./-]+$ ]]; then
+            echo "::error::UPSTREAM_BRANCH invalide : « $UPSTREAM_BRANCH »"
+            exit 1
+          fi
+          if [ "${UPSTREAM_REPO,,}" = "${GITHUB_REPOSITORY,,}" ]; then
+            echo "::error::UPSTREAM_REPO désigne ce dépôt lui-même."
+            exit 1
+          fi
+          echo "actif=oui" >> "$GITHUB_OUTPUT"
+
+      # Lecture seule : l'URL de push de l'amont est neutralisée, aucune
+      # commande de ce job ne peut y écrire. Le code récupéré n'est jamais
+      # extrait ni exécuté : il ne vit que sous forme d'objets git.
+      - name: Récupérer l'amont
+        id: amont
+        if: steps.config.outputs.actif == 'oui'
+        env:
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git remote set-url --push upstream "lecture-seule-pas-de-push"
+          REF="refs/remotes/upstream/${UPSTREAM_BRANCH}"
+          if ! git fetch --no-tags upstream "+refs/heads/${UPSTREAM_BRANCH}:${REF}"; then
+            {
+              echo "### Amont injoignable"
+              echo
+              echo "Impossible de lire \`${UPSTREAM_REPO}\` (branche \`${UPSTREAM_BRANCH}\`)."
+              echo "Dépôt supprimé, rendu privé ou désactivé (DMCA) ? Changer la variable"
+              echo "UPSTREAM_REPO, ou la mettre à « aucun » pour couper la synchro."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Amont ${UPSTREAM_REPO} injoignable."
+            echo "etat=injoignable" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          UP="$(git rev-parse "$REF")"
+          echo "up=$UP" >> "$GITHUB_OUTPUT"
+          if git merge-base --is-ancestor "$UP" HEAD; then
+            echo "Rien de nouveau : ${UPSTREAM_REPO}@${UP:0:12} est déjà intégré." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "etat=a-jour" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! MB="$(git merge-base HEAD "$UP")"; then
+            echo "::warning::${UPSTREAM_REPO} n'a aucun historique commun avec ce dépôt : synchro impossible."
+            echo "etat=sans-lien" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "mb=$MB" >> "$GITHUB_OUTPUT"
+          echo "commits=$(git rev-list --count "$MB..$UP")" >> "$GITHUB_OUTPUT"
+          echo "etat=nouveau" >> "$GITHUB_OUTPUT"
+
+      # Le script de la garde est celui de notre branche principale, déjà
+      # extrait : l'amont ne peut pas le modifier pour se faire bien voir.
+      - name: Analyser avec la garde de sécurité
+        id: garde
+        if: steps.amont.outputs.etat == 'nouveau'
+        env:
+          MB: ${{ steps.amont.outputs.mb }}
+          UP: ${{ steps.amont.outputs.up }}
+        run: |
+          node .github/scripts/garde-securite.mjs \
+            --base "$MB" --head "$UP" --ours HEAD --mode amont \
+            --out "$RUNNER_TEMP/rapport.md"
+
+      # Jamais de force : si la branche porte des commits qui ne viennent pas
+      # de l'amont (une résolution de conflit, par exemple), elle est laissée
+      # telle quelle et la PR existante est seulement mise à jour.
+      - name: Publier la branche de synchro
+        id: branche
+        if: steps.amont.outputs.etat == 'nouveau'
+        env:
+          UP: ${{ steps.amont.outputs.up }}
+        run: |
+          if git fetch --no-tags origin "+refs/heads/${SYNC_BRANCH}:refs/remotes/origin/${SYNC_BRANCH}" 2>/dev/null; then
+            CURRENT="$(git rev-parse "refs/remotes/origin/${SYNC_BRANCH}")"
+            if [ "$CURRENT" = "$UP" ]; then
+              echo "poussee=deja" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if ! git merge-base --is-ancestor "$CURRENT" "$UP"; then
+              echo "::warning::${SYNC_BRANCH} contient des commits hors amont : branche laissée intacte."
+              echo "poussee=bloquee" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          if git push origin "${UP}:refs/heads/${SYNC_BRANCH}"; then
+            echo "poussee=oui" >> "$GITHUB_OUTPUT"
+          else
+            # Cas typique : l'amont modifie .github/workflows, ce que le jeton
+            # du workflow n'a pas le droit de pousser.
+            echo "::warning::Push de ${SYNC_BRANCH} refusé."
+            echo "poussee=refusee" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ouvrir ou mettre à jour la PR
+        if: steps.amont.outputs.etat == 'nouveau'
+        env:
+          COMMITS: ${{ steps.amont.outputs.commits }}
+          CRITIQUES: ${{ steps.garde.outputs.critiques }}
+          POUSSEE: ${{ steps.branche.outputs.poussee }}
+          UP: ${{ steps.amont.outputs.up }}
+        run: |
+          gh label create "$LABEL" --color FBCA04 \
+            --description "Nouveautés du dépôt amont, à relire" --force >/dev/null || true
+
+          if [ "${CRITIQUES:-0}" -gt 0 ]; then
+            TITLE="Synchro amont : ${COMMITS} commit(s) de ${UPSTREAM_REPO} — 🔴 ${CRITIQUES} point(s) critique(s)"
+          else
+            TITLE="Synchro amont : ${COMMITS} commit(s) de ${UPSTREAM_REPO}"
+          fi
+
+          BODY="$RUNNER_TEMP/corps.md"
+          {
+            echo "Nouveautés de \`${UPSTREAM_REPO}\` (\`${UPSTREAM_BRANCH}\` @ \`${UP:0:12}\`), proposées par le workflow **Synchro amont**."
+            echo
+            echo "**Avant de fusionner :**"
+            echo "1. Lire le rapport ci-dessous, en commençant par les points critiques et les fichiers personnalisés ici."
+            echo "2. Fusionner avec **Create a merge commit** — jamais *Squash* ni *Rebase*, sinon la synchro suivante reproposerait tout."
+            echo "3. En cas de conflit sur un fichier personnalisé ici, garder notre version en cas de doute : c'est elle qui porte les protections."
+            echo
+            echo "Ce rapport est produit par la garde de la branche \`${DEFAULT_BRANCH}\`, pas par le code proposé. Une PR ouverte par un workflow ne déclenche pas la garde habituelle des PR : ce rapport la remplace."
+            echo
+            if [ "$POUSSEE" = "bloquee" ]; then
+              echo "> ⚠️ La branche \`${SYNC_BRANCH}\` contient des commits ajoutés à la main : elle n'a pas été avancée jusqu'à \`${UP:0:12}\`."
+              echo
+            fi
+            cat "$RUNNER_TEMP/rapport.md"
+          } > "$BODY"
+
+          if [ "$POUSSEE" != "refusee" ]; then
+            EXISTING="$(gh pr list --head "$SYNC_BRANCH" --base "$DEFAULT_BRANCH" --state open --json number --jq '.[0].number // empty')"
+            if [ -n "$EXISTING" ]; then
+              gh pr edit "$EXISTING" --title "$TITLE" --body-file "$BODY"
+              echo "PR #${EXISTING} mise à jour." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if gh pr create --base "$DEFAULT_BRANCH" --head "$SYNC_BRANCH" \
+                 --title "$TITLE" --body-file "$BODY" --label "$LABEL"; then
+              exit 0
+            fi
+            echo "::warning::Création de la PR refusée : réglage « Allow GitHub Actions to create and approve pull requests » désactivé ?"
+          fi
+
+          # Repli : une issue (une seule ouverte à la fois) porte le rapport.
+          ISSUE_BODY="$RUNNER_TEMP/issue.md"
+          {
+            if [ "$POUSSEE" = "refusee" ]; then
+              echo "La branche \`${SYNC_BRANCH}\` n'a pas pu être poussée : l'amont modifie probablement \`.github/workflows\`, que le jeton du workflow ne peut pas écrire. Synchro à faire à la main (ou avec Claude), en relisant ces fichiers en premier."
+            else
+              echo "La PR n'a pas pu être ouverte automatiquement. Activer *Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*, ou l'ouvrir à la main : branche \`${SYNC_BRANCH}\` vers \`${DEFAULT_BRANCH}\`."
+            fi
+            echo
+            cat "$BODY"
+          } > "$ISSUE_BODY"
+          EXISTING_ISSUE="$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$EXISTING_ISSUE" ]; then
+            gh issue edit "$EXISTING_ISSUE" --title "$TITLE" --body-file "$ISSUE_BODY"
+          else
+            gh issue create --title "$TITLE" --body-file "$ISSUE_BODY" --label "$LABEL"
+          fi
