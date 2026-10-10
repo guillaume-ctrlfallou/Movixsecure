@@ -3,6 +3,9 @@
 Guide pour faire tourner Movix sur ta propre machine, y accéder depuis
 n'importe où, sans publicité et sans exposer l'appareil.
 
+**Première installation ? Suis [`TUTO-SERVEUR.md`](./TUTO-SERVEUR.md)**, pas à pas.
+Ce document-ci est la référence détaillée.
+
 À lire avec [`AUDIT-SECURITE.md`](./AUDIT-SECURITE.md), qui explique *pourquoi*
 chaque durcissement est là.
 
